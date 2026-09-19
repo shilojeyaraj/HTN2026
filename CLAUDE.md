@@ -1,5 +1,17 @@
 # CLAUDE.md
 
+## Current hardware / first milestone (2026-09-19 update)
+
+User-confirmed setup supersedes the older OAK-D/ROS assumptions below:
+Pi 5 Model B Rev 1.0, one working CSI camera (`rpicam-*`), GPS, motors/sensors
+pending. LiDAR is unavailable. Pi captures frames and handles future hardware
+I/O; laptop performs monocular depth over Wi-Fi. The standalone `pi/`,
+`laptop/`, and `shared/` TCP pipeline and commands are documented in README.md.
+Pi hostname `htn2026`, user `mainuser`, last IP `172.20.10.11` on an iPhone
+hotspot. Depth is relative and results are advisory only; this pipeline is
+not wired to the old camera interface, reflex loop, or motors. Preserve the
+onboard watchdog and independent safety requirements before adding motion.
+
 Project context for an autonomous voice-interactive rover built at Hack the North 2026.
 Single source of truth for the build. Companion docs: **BACKBOARD.md** (the brain's API) and **PRIZE_TRACKS.md** (sponsor tracks and scopes). Read all three before writing code.
 
