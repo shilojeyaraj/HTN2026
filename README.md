@@ -8,7 +8,8 @@ A USB webcam plugs into the Pi 5. Its video and microphone audio stream to
 one laptop over TCP. The laptop opens a live video window and transcribes microphone audio locally.
 Recognized text appears below the video and as JSON in the laptop terminal.
 Optional monocular depth runs independently. There is no audio playback.
-Nothing is recorded to disk. Run commands from the repository root.
+Nothing is recorded to disk unless `--record` is enabled on the laptop.
+Run commands from the repository root.
 
 ### 1. Laptop
 
@@ -174,7 +175,7 @@ The window opens on the first valid video frame, and its title reports display
 FPS. Provisional transcripts update while speech is arriving, then finalize after
 a pause. Provisional wording may change as more context arrives. Close the window or press Escape
 to stop the server. Old images in `test/` are left alone; no new images or audio
-files are saved on either device.
+files are saved on either device unless laptop recording is enabled.
 
 Video capture, audio capture, network transmission, preview, transcription,
 and depth run independently. Queues retain the latest video and at most 200 ms of pending
@@ -218,8 +219,8 @@ The 10-second cap can split words; this is a minimal utterance-based pipeline.
 Up to two completed utterances can wait behind the active transcription.
 If inference falls behind, the oldest pending utterance is dropped with a
 warning so video remains responsive. Disconnect flushes the last utterance
-and drains the queue before accepting another Pi. No audio or transcript
-files are created. Terminal JSON includes `type: "transcript"`, `utterance_id`,
+and drains the queue before accepting another Pi. Transcription itself creates
+no audio or transcript files; optional recording separately saves received media. Terminal JSON includes `type: "transcript"`, `utterance_id`,
 `text`, and `final: false` for provisional updates / `final: true` for completed
 utterances. Replace text with the same utterance ID rather than appending each
 revision. IDs restart per TCP connection. An empty final clears a provisional
@@ -227,6 +228,47 @@ that was not confirmed; failures emit an empty final with an `error` field.
 The preview labels provisional text and replaces it on finalization. Silence produces no text output.
 Speech recognition can make mistakes, especially in noisy rooms; these texts
 are not authorized movement commands.
+
+### Optional laptop recording
+
+Add `--record` to the laptop server command:
+
+```sh
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record
+# Optionally choose another output directory:
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record --record-dir /path/to/recordings
+```
+
+Each Pi connection creates a UTC-timestamped session folder (ignored by Git):
+
+```text
+recordings/20260919T143022.123456Z/
+  video.mp4
+  audio.wav
+  transcript.txt
+```
+
+`video.mp4` is silent H.264 video, including frames skipped by depth inference.
+`audio.wav` contains the received mono, 16-bit, 16 kHz microphone audio.
+`transcript.txt` contains one finalized utterance per line; provisional revisions
+are not saved. Disconnecting flushes the last utterance before closing the files.
+Reconnecting creates a new folder. No Pi code sync is needed.
+
+Recording uses PyAV; no additional system FFmpeg installation is required on
+the laptop. H.264 encoding and disk writes add work to reception, so use a fast
+local disk with enough free space. MP4 is created when the first valid video
+frame arrives. With no microphone audio, the WAV is empty; with
+`--no-transcription`, the transcript is empty. Recording also works with
+`--no-depth` and `--no-preview`.
+
+Video timing reflects laptop receipt time; WAV samples are stored consecutively.
+Exact A/V synchronization and reconstruction of data lost before receipt are
+not guaranteed. Recording errors close the connection and are logged.
+
+Stop the Pi client, close the preview window, or use Ctrl+C on the server to
+finalize the files and pending transcription. Force-killing the process or
+losing power can leave unfinished files. Existing recordings are never
+overwritten or automatically deleted.
 
 ### Depth results
 
@@ -262,6 +304,7 @@ verify physical USB hardware. A synthetic FFmpeg capture/transcription integrati
 check is also available as `python3 -m unittest test_webcam_audio` (requires
 ffmpeg; uses synthetic devices and a stub recognizer). Speech segmentation and
 queue behavior are checked with `python3 -m unittest test_transcription`.
+Recording and file-finalization checks: `python3 -m unittest test_recording`.
 
 Wire format: uint32 big-endian payload length, followed by JPEG bytes **or**
 `PCM1` + mono signed 16-bit little-endian audio at 16 kHz (up to 640 audio bytes,
