@@ -2,8 +2,10 @@
 
 import io
 import json
+from pathlib import Path
 import socket
 import struct
+import tempfile
 import threading
 import unittest
 
@@ -25,6 +27,9 @@ class PipelineTest(unittest.TestCase):
             summarize(np.full((20, 30), np.nan))
 
     def test_roundtrip_and_recovery(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        frame_dir = Path(directory.name) / "test"
         client, server = socket.socketpair()
         client.settimeout(2)
         server.settimeout(2)
@@ -33,7 +38,7 @@ class PipelineTest(unittest.TestCase):
         def serve():
             with server:
                 try:
-                    handle_connection(server, lambda image: np.tile(np.arange(30), (20, 1)))
+                    handle_connection(server, lambda image: np.tile(np.arange(30), (20, 1)), frame_dir)
                 except EOFError:
                     pass
                 except Exception as exc:
@@ -46,6 +51,7 @@ class PipelineTest(unittest.TestCase):
                 with self.assertLogs(level="ERROR"):
                     send(client, b"bad jpeg", MAX_FRAME)
                     self.assertEqual(json.loads(receive(client, MAX_RESULT))["status"], "error")
+                self.assertEqual(list(frame_dir.iterdir()), [])
                 jpeg = io.BytesIO()
                 Image.new("RGB", (64, 48)).save(jpeg, format="JPEG")
                 # Send fragmented headers and payload to exercise TCP stream framing.
@@ -56,6 +62,12 @@ class PipelineTest(unittest.TestCase):
                 result = json.loads(receive(client, MAX_RESULT))
                 self.assertEqual(result["preferred_direction"], "left")
                 self.assertTrue(result["advisory_only"])
+                send(client, payload, MAX_FRAME)
+                self.assertEqual(json.loads(receive(client, MAX_RESULT))["status"], "ok")
+                saved = list(frame_dir.glob("frame-*.jpg"))
+                self.assertEqual(len(saved), 2)
+                for path in saved:
+                    self.assertEqual(path.read_bytes(), payload)
         finally:
             client.close()
             thread.join(3)

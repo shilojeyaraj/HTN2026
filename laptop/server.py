@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import logging
+from pathlib import Path
 import socket
 import time
 
@@ -13,6 +14,7 @@ from PIL import Image
 from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
 
 MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
+FRAME_DIR = Path(__file__).resolve().parent.parent / "test"
 
 
 def summarize(depth):
@@ -51,7 +53,8 @@ def load_model(device):
     return infer
 
 
-def handle_connection(conn, infer):
+def handle_connection(conn, infer, frame_dir=FRAME_DIR):
+    frame_dir.mkdir(parents=True, exist_ok=True)
     while True:
         jpeg = receive(conn, MAX_FRAME)
         start = time.monotonic()
@@ -59,9 +62,13 @@ def handle_connection(conn, infer):
             with Image.open(io.BytesIO(jpeg)) as image:
                 if image.format != "JPEG" or max(image.size) > 1920:
                     raise ValueError("expected JPEG at most 1920 pixels per side")
-                result = summarize(infer(image.convert("RGB")))
+                rgb = image.convert("RGB")
+                path = frame_dir / f"frame-{time.time_ns()}.jpg"
+                path.write_bytes(jpeg)
+                logging.info("Saved received frame: %s", path)
+                result = summarize(infer(rgb))
         except Exception:
-            logging.exception("Frame inference failed")
+            logging.exception("Frame processing failed")
             result = {"status": "error", "relative_proximity": None,
                       "preferred_direction": None}
         result.update(processing_ms=round((time.monotonic() - start) * 1000),
