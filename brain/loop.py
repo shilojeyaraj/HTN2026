@@ -40,11 +40,31 @@ def _perceive(state: RobotState) -> RobotState:
     return state
 
 
-def _execute_verb(name: str, args: dict, state: RobotState, arbiter) -> dict:
+def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None) -> dict:
     """Execute a single verb through the safety gate and controller."""
     if name == "speak":
         speak(args["text"])
         return {"status": "completed"}
+    if name == "look_around":
+        try:
+            frame_jpeg, detections = get_latest_frame()
+            state.scene_description = describe_scene(frame_jpeg, detections)
+            return {"scene": state.scene_description}
+        except Exception:
+            return {"error": "vision unavailable", "scene": state.scene_description or "unknown"}
+    if name == "check_map":
+        if mapper is not None:
+            return mapper.nearby_summary(state.robot_pose, args.get("radius_m", 3.0))
+        return {"error": "map not available"}
+    if name == "check_safety":
+        result = safety.check(args["action"], args, get_latest_detections())
+        return {"status": result, "action": args["action"]}
+    if name == "search_knowledge":
+        return brain.search_memory(args["query"])
+    if name == "log_finding":
+        return brain.log_finding(args["finding_type"], args["description"])
+    if name == "analyze_patterns":
+        return brain.get_insights()
     if name == "get_obstacles":
         return {"detections": get_latest_detections()}
     if name == "get_state":
@@ -114,14 +134,14 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
     if state.last_user_command:
         parsed = command_parser.parse(state.last_user_command)
         if parsed is not None:
-            result = _execute_verb(parsed["verb"], parsed["args"], state, arbiter)
+            result = _execute_verb(parsed["verb"], parsed["args"], state, arbiter, mapper)
             logger.info("parser fast-path: %s -> %s -> %s", state.last_user_command, parsed, result)
             state.last_user_command = None
             _update_map(state, mapper, pose_estimator, transcript_buffer)
             return state
 
     def execute_tool(name: str, args: dict) -> dict:
-        return _execute_verb(name, args, state, arbiter)
+        return _execute_verb(name, args, state, arbiter, mapper)
 
     user_content = (
         f"Scene: {state.scene_description}\n"

@@ -87,6 +87,54 @@ VERBS = [
     #         "parameters": {"type": "object", "properties": {}},
     #     },
     # },  # commented out — teammate is wiring HC-SR04
+    {
+        "type": "function",
+        "function": {
+            "name": "look_around",
+            "description": "Call the vision agent to describe the current scene. Use when you need to re-examine your surroundings after moving or when you want a fresh visual assessment.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_map",
+            "description": "Query the occupancy map for nearby obstacles, sounds, heat sources, hazards, and annotations within a radius. Use to understand what's around you and where to explore next.",
+            "parameters": {"type": "object", "properties": {"radius_m": {"type": "number", "description": "Search radius in meters (default 3.0)"}}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_safety",
+            "description": "Ask the safety agent to vet a proposed action before executing it. Returns OK or VETO with a reason. Use before risky moves like driving forward when unsure.",
+            "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "The action to vet (e.g. 'forward', 'backward', 'turn')"}, "distance_m": {"type": "number"}}, "required": ["action"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge",
+            "description": "Search the rescue protocol knowledge base and past mission memory for relevant information. Use when you encounter a hazard, find a survivor, or need guidance on how to handle a situation.",
+            "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "What to search for (e.g. 'thermal hazard approach', 'victim communication', 'structural collapse')"}}, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "log_finding",
+            "description": "Record a mission finding in persistent memory. Use when you discover a survivor, identify a hazard, or note something important for the mission record.",
+            "parameters": {"type": "object", "properties": {"finding_type": {"type": "string", "description": "Category: survivor, hazard, area_explored, or other"}, "description": {"type": "string", "description": "What was found, including location details and condition"}}, "required": ["finding_type", "description"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_patterns",
+            "description": "Analyze patterns across all stored mission memory and past encounters. Returns insights about rescue success rates, location patterns, and duration trends. Use when planning strategy or deciding which areas to prioritize.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are a rescue rover: a small autonomous robot that explores hazardous \
@@ -107,4 +155,15 @@ may only be detectable by the temperature sensor.
 Use speak() the way a real rescue responder would: calm, clear, reassuring, brief. \
 Narrate what matters as you find it -- a hazard, an obstacle, a person -- don't stay \
 silent through something worth reporting. If a spoken command is present, treat it as a \
-person you can hear talking to you: acknowledge it and respond directly, then act on it."""
+person you can hear talking to you: acknowledge it and respond directly, then act on it.
+
+You have a rescue protocol knowledge base and 8 past encounter records. When you \
+encounter a hazard, find a survivor, or face an unfamiliar situation, call \
+search_knowledge() to retrieve relevant protocols and past mission findings — \
+including historical encounters from previous rescue missions. Log every important \
+discovery with log_finding() so the mission record stays current. Use check_map() \
+to understand your surroundings before deciding where to go next, and look_around() \
+when you need a fresh visual assessment after moving. Use check_safety() before \
+risky moves when you're unsure about obstacles. Call analyze_patterns() to learn \
+from past encounters — it analyzes rescue success rates, location patterns, and \
+duration trends across all stored mission memory."""

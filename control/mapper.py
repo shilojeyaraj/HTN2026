@@ -133,6 +133,41 @@ class OccupancyMap:
         if len(self.trail) > TRAIL_MAX:
             self.trail = self.trail[-TRAIL_MAX:]
 
+    def nearby_summary(self, pose: tuple[float, float, float], radius_m: float = 3.0) -> dict:
+        """Return a summary of map features within radius_m of the pose."""
+        x, y, _ = pose
+        obstacles = []
+        gx, gy = self._world_to_grid(x, y)
+        r = int(radius_m / self.resolution)
+        for dx in range(-r, r + 1):
+            for dy in range(-r, r + 1):
+                cx, cy = gx + dx, gy + dy
+                if not self._in_bounds(cx, cy):
+                    continue
+                prob = 1.0 / (1.0 + np.exp(-self.grid[cy, cx]))
+                if prob > 0.65:
+                    wx = (cx * self.resolution) - self.size * self.resolution / 2
+                    wy = (cy * self.resolution) - self.size * self.resolution / 2
+                    dist = math.sqrt((wx - x) ** 2 + (wy - y) ** 2)
+                    if dist <= radius_m:
+                        obstacles.append({"x": round(wx, 2), "y": round(wy, 2), "prob": round(float(prob), 2), "dist_m": round(dist, 2)})
+        sounds = [{"x": s["x"], "y": s["y"], "kind": s["kind"], "label": s["label"], "dist_m": round(math.sqrt((s["x"] - x) ** 2 + (s["y"] - y) ** 2), 2)}
+                  for s in self.sound_sources if math.sqrt((s["x"] - x) ** 2 + (s["y"] - y) ** 2) <= radius_m]
+        heat = [{"x": h["x"], "y": h["y"], "celsius": h["celsius"], "status": h["status"], "dist_m": round(math.sqrt((h["x"] - x) ** 2 + (h["y"] - y) ** 2), 2)}
+                for h in self.heat_points if math.sqrt((h["x"] - x) ** 2 + (h["y"] - y) ** 2) <= radius_m]
+        hazards = [{"x": h["x"], "y": h["y"], "type": h["type"], "dist_m": round(math.sqrt((h["x"] - x) ** 2 + (h["y"] - y) ** 2), 2)}
+                   for h in self.hazards if math.sqrt((h["x"] - x) ** 2 + (h["y"] - y) ** 2) <= radius_m]
+        annotations = [{"x": a["x"], "y": a["y"], "text": a["text"], "dist_m": round(math.sqrt((a["x"] - x) ** 2 + (a["y"] - y) ** 2), 2)}
+                       for a in self.annotations if math.sqrt((a["x"] - x) ** 2 + (a["y"] - y) ** 2) <= radius_m]
+        return {
+            "obstacles_nearby": obstacles[:10],
+            "sounds_nearby": sounds,
+            "heat_nearby": heat,
+            "hazards_nearby": hazards,
+            "annotations_nearby": annotations,
+            "trail_points": len(self.trail),
+        }
+
     def to_payload(self, rover_pose: tuple[float, float, float]) -> dict:
         """Serialize to JSON for the WebSocket server."""
         prob = 1.0 / (1.0 + np.exp(-self.grid))
