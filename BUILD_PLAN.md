@@ -145,25 +145,31 @@ LangGraph skeleton, ElevenLabs TTS thread. (This is the current repo state.)
 - **Exit test:** robot narrates a decision out loud during a live run. Qualifies
   **ElevenLabs**.
 
-**Phase 5a — Backboard voice-in (STT).**
-- Add `BackboardBrain.transcribe()`, implement `voice/stt.py` against it, wire push-to-talk
-  capture to it, feed the transcript into `state.last_user_command` for the next tick.
-- **Exit test:** a spoken command changes the robot's next action. Deepens **Backboard**.
+**Phase 5a — Baseten STT (direct).**
+- `voice/stt.py` records while the push-to-talk button is held and POSTs the wav to a
+  Baseten-hosted Whisper Large V3 Turbo predict endpoint (`BASETEN_STT_MODEL_ID`).
+  `voice/push_to_talk.py` runs the GPIO loop and sets a wake event so the main loop
+  reacts immediately instead of waiting for the next episode.
+- **Blocked on:** deploying Whisper Large V3 Turbo from the Baseten model library to get
+  `BASETEN_STT_MODEL_ID`, and confirming the Truss request/response schema (VERIFY flag in
+  `voice/stt.py`).
+- **Exit test:** a spoken command changes the robot's next action. Qualifies **Baseten**.
 
-**Phase 5b — Baseten fine-tuned vision model.**
-- Capture real-world video/frames from the rover's camera at the event (however much time
-  allows — this determines what's realistic to fine-tune on).
-- Fine-tune a small vision model on that footage on Baseten's H100 workstations (visit the
-  booth to enable), deploy it on Baseten.
-- Implement `perception/finetuned_vision.py` against the deployed model's real predict
-  endpoint and output schema (unknowable until it exists — see section 2).
-- Wire its output into `RobotState` (new field, e.g. `venue_model_output`) and into
-  `brain/planner.py`'s prompt content, alongside the Gemini scene description.
-- **Exit test:** the planner's context visibly includes a label/classification the
-  fine-tuned model produced from the rover's own footage. Qualifies **Baseten**.
-- **Risk:** this is the highest-uncertainty phase — data capture, labeling, and a
-  fine-tuning job all have to happen live. If time is short, cut this phase; Backboard,
-  Gemini, and ElevenLabs are unaffected since they don't depend on it.
+**Phase 5b — Baseten command-parser fine-tune (deferred side quest).**
+- Not the track-qualifying Baseten slice (that's Phase 5a STT). Only pursue after the core
+  robot works. Visit the Baseten booth to enable H100 training access.
+- **Training workflow (confirmed from Baseten docs):**
+  - `run.sh` installs `trl`, `peft`, `transformers`, `datasets` and runs `train.py`.
+  - `train.py` loads a base model (docs use Qwen3-4B; swap to **Qwen3-1.7B** — smaller and
+    faster for a robot command parser), builds a `LoraConfig` + `SFTConfig`, and calls
+    `trainer.save_model(os.getenv("BT_CHECKPOINT_DIR"))`.
+  - Dataset format is whatever TRL's `SFTTrainer` expects (check TRL docs directly for
+    field names — prompt/completion vs. messages — Baseten runs your training code as-is,
+    no Baseten-specific schema).
+  - Deploy: `baseten train checkpoint deploy --job-id <job_id>` wraps the checkpoint as a
+    Truss and exposes a callable inference endpoint.
+- **Risk:** needs a labeled command dataset that doesn't exist yet, plus a training job
+  during a 36-hour hackathon. Cut this without hesitation if time is short.
 
 **Phase 6 — Framing and stretch add-ons.**
 - No new code required for **openJiuwen**: write up the scene -> planner -> safety
@@ -179,8 +185,10 @@ LangGraph skeleton, ElevenLabs TTS thread. (This is the current repo state.)
 
 - Current Gemini vision model slug to use directly (not just via Backboard) — check
   `ai.google.dev` for the live multimodal model name at build time.
-- Baseten Whisper Large V3 Turbo's actual request/response schema once deployed — Truss
-  models vary; don't assume it matches Whisper's HF pipeline output verbatim.
+- Baseten Whisper Large V3 Turbo's request/response schema **confirmed** from the model
+  library page (https://www.baseten.co/library/whisper/): JSON POST with
+  `whisper_input.audio.audio_b64` (base64-encoded wav) + `whisper_params.audio_language`,
+  response has `segments[].text` (join them). `voice/stt.py` updated to match.
 - From BACKBOARD.md section 12, still open: whether `backboard-sdk`'s `send_message`
   takes `files=[...]` for vision the same way the raw HTTP multipart endpoint does (moot
   now for the vision role since Gemini is direct, but still relevant if scene description
@@ -194,15 +202,17 @@ LangGraph skeleton, ElevenLabs TTS thread. (This is the current repo state.)
 
 ## 5. Sponsor-track checklist (what a judge needs to actually see)
 
-- **Backboard:** thread/tool-call logs showing planner routing + voice-in (STT) +
+- **Backboard:** thread/tool-call logs showing planner routing + Gemini vision (BYOK) +
   (recommended) `memory="Auto"` demo beat — e.g. "remember this spot," drive off, "take me
   back."
-- **Gemini:** scene description output visibly driven by the live camera feed, not canned.
+- **Gemini:** scene description output visibly driven by the live camera feed, not canned
+  (routed through Backboard with `llm_provider="google"`).
 - **ElevenLabs:** the robot audibly narrating a decision or answering a spoken command
-  during the live demo.
-- **Baseten:** the fine-tuned model's output (a label/classification from footage the
-  rover itself captured) visible in the planner's context, plus the training story
-  (booth visit, H100 fine-tuning job) told in the pitch.
+  during the live demo (direct SDK call, `eleven_flash_v2_5`).
+- **Baseten:** a spoken command transcribed by the Baseten-hosted Whisper model changes
+  the robot's next action. Bonus (deferred): command-parser fine-tune story (Qwen3-1.7B,
+  LoRA SFT, `baseten train checkpoint deploy`) told in the pitch if the training job
+  happens.
 - **Rox / Huawei openJiuwen:** no separate artifact — these are won in the pitch, framing
   the same pipeline (noisy real-world sensor data -> agent decisions under uncertainty;
   scene/planner/safety as coordinating agents).
@@ -214,3 +224,29 @@ LangGraph skeleton, ElevenLabs TTS thread. (This is the current repo state.)
 - Prize selections due on Devpost by **2:00 PM EDT Saturday** — assign one owner now
   (CLAUDE.md / PRIZE_TRACKS.md don't currently name one).
 - Re-run `pip install -r requirements.txt` after adding `backboard-sdk`.
+
+---
+
+## 7. Current status (2026-09-19)
+
+**Code written (all phases have implementations):**
+
+| Phase | Component | Code status | Blocked on |
+| --- | --- | --- | --- |
+| 1 | Reflex loop, arbiter, controller | `control/reflex.py`, `control/arbiter.py`, `control/controller.py` written | Hardware: OAK-D camera pipeline (`camera.py` read_detections/read_frame_jpeg = NotImplementedError), chassis/motor driver, GPIO button |
+| 2 | Backboard brain | `brain/backboard_client.py`, `brain/loop.py`, `brain/tools.py`, `brain/safety.py`, `brain/state.py` written | `BACKBOARD_API_KEY`, verify SDK signatures (VERIFY flags), Gemini API key in Backboard dashboard (BYOK) |
+| 3 | Gemini vision | `perception/vision.py` written (routes through Backboard `describe()`) | Same as Phase 2 — needs Backboard key + Gemini BYOK + verify `files=` kwarg |
+| 4 | ElevenLabs voice out | `voice/tts.py` written, `VOICE_ID` now read from env | `ELEVENLABS_API_KEY` in .env (done), `mpv`/`ffplay` on the Pi |
+| 5a | Baseten STT | `voice/stt.py`, `voice/push_to_talk.py` written | Deploy Whisper Large V3 Turbo from Baseten library → `BASETEN_STT_MODEL_ID`, confirm Truss request/response schema |
+| 5b | Baseten fine-tune | Not started (deferred) | Labeled command dataset, H100 training access (booth) |
+| 6 | openJiuwen framing | No code needed — pitch/README framing | — |
+
+**Simulators for testing without hardware:** `control/fake_robot.py` (Tier-0) and
+`control/fake_robot_full.py` (full-sensor: distress/hazard audio, temperature, gyro,
+encoder slip) match the real verb signatures so the brain loop can be exercised
+end-to-end without the OAK-D or chassis.
+
+**Bottom line:** the software stack is fully scaffolded for all five committed tracks.
+What remains is (1) hardware wiring (camera + chassis + GPIO), (2) plugging in API keys
+and deploying the Baseten Whisper model, and (3) verifying the Backboard SDK signatures
+against the installed version. None of those are code problems — they're setup tasks.

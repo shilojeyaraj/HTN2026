@@ -12,8 +12,7 @@ from elevenlabs.play import play  # shells out to mpv/ffplay; `sudo apt install 
 
 _client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
 
-# TODO: pick the rover's actual voice from the ElevenLabs dashboard and swap this id.
-VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
+VOICE_ID = os.environ["VOICE_ID"]
 MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
 
 

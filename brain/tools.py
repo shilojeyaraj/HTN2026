@@ -55,6 +55,30 @@ VERBS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_temperature",
+            "description": "Read the ambient temperature sensor. Returns celsius and status (ok/warm/overheat). Useful for detecting fire or hazardous heat.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_audio",
+            "description": "Read the microphone for ambient sound level and detected audio events. Events include distress (screams, calls for help), sound (hazard noise like rubble or creaking), and voice (operator commands). Returns dB level and event details if something was detected.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_gyro",
+            "description": "Read the IMU/gyroscope for tilt, impact, and orientation. Returns pitch, roll, vertical acceleration, tipped (bool), and bump (bool). Use to detect if the robot has been picked up, flipped, or bumped into something.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """You are a rescue rover: a small autonomous robot that explores hazardous \
@@ -65,6 +89,12 @@ Move by calling forward/backward/turn in small bounded steps; check progress wit
 get_obstacles/get_state. Each movement verb reports back whether it completed or stopped \
 early due to an obstacle -- use that to decide your next call. Never invent motor \
 commands outside the provided tools.
+
+You have environmental sensors: get_temperature (detect fire or hazardous heat), \
+get_audio (listen for distress calls, hazard noise, or operator voices), and get_gyro \
+(detect tipping, impacts, or being picked up). Poll these when the situation calls for it \
+-- a survivor may be calling for help that only the microphone can hear, or a hot spot \
+may only be detectable by the temperature sensor.
 
 Use speak() the way a real rescue responder would: calm, clear, reassuring, brief. \
 Narrate what matters as you find it -- a hazard, an obstacle, a person -- don't stay \

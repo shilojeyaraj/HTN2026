@@ -4,6 +4,7 @@ optional command-parser fine-tune (CLAUDE.md section 13) is a separate, deferred
 quest and doesn't live here.
 """
 
+import base64
 import os
 import tempfile
 import wave
@@ -39,15 +40,19 @@ def record_while_held(is_held) -> str:
 
 def transcribe(audio_path: str) -> str:
     model_id = os.environ["BASETEN_STT_MODEL_ID"]
-    # VERIFY: exact request/response schema once Whisper Large V3 Turbo is deployed --
-    # Baseten Truss packaging varies, this multipart-audio shape is a reasonable default,
-    # not a confirmed contract (BUILD_PLAN.md).
     with open(audio_path, "rb") as audio_file:
-        response = requests.post(
-            PREDICT_URL_TEMPLATE.format(model_id=model_id),
-            headers={"Authorization": f"Api-Key {os.environ['BASETEN_API_KEY']}"},
-            files={"audio": audio_file},
-            timeout=15,
-        )
+        audio_b64 = base64.b64encode(audio_file.read()).decode("utf-8")
+    response = requests.post(
+        PREDICT_URL_TEMPLATE.format(model_id=model_id),
+        headers={"Authorization": f"Api-Key {os.environ['BASETEN_API_KEY']}"},
+        json={
+            "whisper_input": {
+                "audio": {"audio_b64": audio_b64},
+                "whisper_params": {"audio_language": "en"},
+            }
+        },
+        timeout=15,
+    )
     response.raise_for_status()
-    return response.json()["text"]
+    segments = response.json()["segments"]
+    return " ".join(seg["text"] for seg in segments).strip()

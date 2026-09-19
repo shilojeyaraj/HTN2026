@@ -1,7 +1,9 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 Project context for an autonomous voice-interactive rover built at Hack the North 2026.
-Single source of truth for the build. Companion docs: **BACKBOARD.md** (the brain's API) and **PRIZE_TRACKS.md** (sponsor tracks and scopes). Read all three before writing code.
+Single source of truth for the build. Companion docs: **ARCHITECTURE.md** (data flow diagrams), **BACKBOARD.md** (the brain's API), **PRIZE_TRACKS.md** (sponsor tracks), **BUILD_PLAN.md** (phased build status), **TODO.md** (outstanding action items). Read CLAUDE.md and ARCHITECTURE.md before writing code.
 
 ---
 
@@ -53,18 +55,21 @@ Camera --> Perception --> Brain (Backboard) --> Arbiter --> Controller --> Motor
 Backboard is the deliberative brain. See BACKBOARD.md for API detail. The other three sponsors each own a **distinct, directly-called slice** so they count for their own tracks instead of being proxied under Backboard (see PRIZE_TRACKS.md for why).
 
 - **Backboard = core.** Agent loop, tool calling, thread state, planner model routing, and (optional, high value) memory. It is a cloud API, so it lives in the slow loop only.
-- **Gemini = vision / scene understanding**, called directly via the Gemini API.
+- **Gemini = vision / scene understanding**, routed through Backboard as BYOK (connected in the Backboard dashboard, not a direct SDK call). Also the planner model (`llm_provider="google"`, `model_name="gemini-2.5-pro"`).
 - **ElevenLabs = voice out**, called directly.
-- **Baseten = voice in (STT)**, called directly, plus the optional command-parser fine-tune (see section 12 and TRAINING notes).
+- **Baseten = voice in (STT)**, called directly, plus the command-parser fine-tune (see section 12).
 
 **openJiuwen (multi-agent) tie-in:** route distinct roles (scene, planner, safety) to distinct models inside Backboard. That heterogeneous split is the genuine multi-agent system the track rewards. Do not collapse it into one prompt.
 
 ### Environment variables (never hardcode keys)
 ```
-BACKBOARD_API_KEY
-GEMINI_API_KEY
-ELEVENLABS_API_KEY
-BASETEN_API_KEY
+BACKBOARD_API_KEY       # Backboard API (app.backboard.io)
+BASETEN_API_KEY          # Baseten inference + training
+BASETEN_STT_MODEL_ID     # Deployed Whisper model ID (from Baseten library deploy)
+BASETEN_PARSER_MODEL_ID  # Deployed fine-tuned command parser model ID
+ELEVENLABS_API_KEY       # ElevenLabs TTS
+VOICE_ID                 # ElevenLabs voice ID
+# GEMINI_API_KEY is NOT in .env — it's connected as BYOK in the Backboard dashboard
 ```
 
 ---
@@ -92,8 +97,10 @@ safety_status     # OK or VETO
 5. **Execute** the tool calls: movement intent goes to the arbiter (section 6), never straight to motors.
 6. If `speak()` was called, fire ElevenLabs TTS **asynchronously** (never block the tick).
 
-### Voice-in (event-driven)
-Push-to-talk (hold a button) -> Baseten STT -> injected as `last_user_command` for the next tick. Do NOT use audio-to-audio conversational mode; the robot must emit tool calls, which live in the text layer.
+### Voice-in (two modes)
+**Ambient listening (autonomous, primary rescue mode):** the brain calls `get_audio()` as a tool to poll the mic for distress calls, hazard noise, and voices. When it detects distress, it responds autonomously (speak + approach). No button needed — this is how the rover finds survivors.
+
+**Push-to-talk (operator override, optional):** GPIO button held → Baseten STT → `last_user_command` → `wake_event` interrupts the idle wait between episodes. An operator can give direct commands ("stop", "turn left"). The rover works without this.
 
 ---
 
@@ -107,9 +114,15 @@ forward(distance_m: float)   # drive forward, then stop
 backward(distance_m: float)  # drive back, then stop
 turn(degrees: float)         # + left, - right, then stop
 stop()                       # halt
-speak(text: str)             # ElevenLabs TTS
-# read side: get_obstacles(), get_state()
+speak(text: str)             # ElevenLabs TTS (async, never blocks)
+# read side:
+get_obstacles()             # latest OAK-D detections
+get_state()                  # pose, velocity, goal
+get_temperature()            # ambient temp: {celsius, status: ok|warm|overheat}
+get_audio()                  # mic: {db, event: {kind, label, text, bearing_deg}|null}
+get_gyro()                   # IMU: {pitch_deg, roll_deg, accel_z_g, tipped, bump}
 ```
+The brain also has a **fast path**: a Baseten fine-tuned command parser (`brain/command_parser.py`) intercepts simple voice commands ("forward 2 meters", "turn left") and executes them directly without a Backboard round-trip. Complex or unrecognized commands fall through to the Backboard brain.
 Make verbs **bounded and self-completing**: `forward(0.5)` drives ~0.5 m (open-loop time = distance / speed is fine), stops, and returns a status (`completed` or `stopped_by_obstacle` with distance). This keeps the loop clean and gives the brain feedback to reason with. Keep `set_goal(x, y)` as an upgrade only if odometry ends up solid.
 
 ### Verb to velocity
@@ -172,29 +185,41 @@ A minimal onboard node: read depth / detections, emergency-stop and simple avoid
 
 ---
 
-## 11. Proposed repo structure
+## 11. Repo structure
 
 ```
 /
-  CLAUDE.md  BACKBOARD.md  PRIZE_TRACKS.md
+  CLAUDE.md  ARCHITECTURE.md  BACKBOARD.md  PRIZE_TRACKS.md  BUILD_PLAN.md  TODO.md
   .env.example              # names only, no real keys
+  main.py                   # full stack: arbiter + reflex + push-to-talk + brain episodes
   perception/
-    camera.py               # capture, depth, detections
-    vision.py               # frame -> Gemini -> structured scene
+    camera.py               # OAK-D capture (stubs until hardware wired)
+    vision.py               # frame -> Backboard Gemini -> scene description
+    sensors.py              # temperature, audio, gyro (stubs until hardware wired)
   brain/
-    loop.py                 # deliberative tick
-    backboard_client.py     # assistant, thread, tools, memory
-    tools.py                # movement verb definitions
-    safety.py               # veto logic
+    loop.py                 # deliberative tick: perceive -> parser fast-path -> Backboard brain
+    backboard_client.py     # Backboard SDK wrapper (verified against v1.5.19)
+    command_parser.py       # Baseten fine-tuned parser inference client
+    tools.py                # 10 verb definitions + system prompt
+    safety.py               # SayCan veto gate (only "forward" is gated)
+    state.py                # RobotState dataclass + Detection TypedDict
   control/
-    reflex.py               # fast onboard safety loop (ROS 2)
-    arbiter.py              # twist_mux / priority mux
-    controller.py           # verb -> Twist -> wheels, watchdog
-  nav/
-    nomad_core.py           # optional: image -> waypoint wrapper
+    reflex.py               # 30 Hz safety loop (classical, no cloud)
+    arbiter.py              # priority mux: reflex > brain > watchdog halt
+    controller.py           # verb -> drive -> arbiter, self-completing
+    fake_robot.py           # Tier-0 simulator (same verbs as real controller)
+    fake_robot_full.py      # full-sensor simulator (temp, audio, gyro, encoders)
   voice/
-    stt.py                  # push-to-talk + Baseten STT
-    tts.py                  # ElevenLabs playback (async)
+    stt.py                  # Baseten Whisper STT (JSON + base64, confirmed schema)
+    tts.py                  # ElevenLabs direct (async, non-blocking)
+    push_to_talk.py         # GPIO button -> record -> STT -> wake_event
+  training/
+    config.py               # Baseten training project config (H100)
+    train.py                # Qwen3-1.7B + LoRA SFT via TRL
+    dataset.jsonl            # 552 command→verb examples
+    generate_dataset.py     # programmatic dataset generator
+    run.sh                  # pip install + train
+  tests/                    # 64 unit tests + 9 integration tests
   ros2_ws/
 ```
 
@@ -202,21 +227,47 @@ A minimal onboard node: read depth / detections, emergency-stop and simple avoid
 
 ## 12. Commands
 
-TODO: fill in once scaffolded.
+```bash
+# --- setup ---
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pytest pytest-asyncio   # for tests
+
+# --- tests ---
+pytest -m "not integration" -v       # unit tests only (64 tests, no network)
+pytest -m integration -v             # integration tests (need real API keys in .env)
+pytest tests/test_safety.py -v       # single test file
+pytest -k "test_forward" -v          # by name pattern
+
+# --- run the full stack (needs hardware) ---
+python main.py                        # arbiter + reflex + push-to-talk + brain episodes
+
+# --- run the simulator (no hardware needed) ---
+python control/fake_robot.py --headless        # Tier-0: driving + obstacle avoidance
+python control/fake_robot_full.py --headless    # full sensors: temp, audio, gyro, encoders
+
+# --- Baseten training (needs H100 access from booth) ---
+baseten train push --config training/config.py           # start fine-tune
+baseten train job logs --job-id <id> --tail               # watch training
+baseten train checkpoint deploy --job-id <id>            # deploy checkpoint → model ID
 ```
-# setup
-# run reflex loop only
-# run brain loop
-# run full stack
-```
+
+### Backboard SDK notes (verified against v1.5.19)
+- `send_message` returns `ChatMessagesResponse` — convenience properties (`status`, `tool_calls`, `content`, `thread_id`, `assistant_id`) proxy to the last message.
+- `input_image=` for vision (not `files=`).
+- `call.function.arguments` is a JSON **string** — must `json.loads()` it.
+- `submit_tool_outputs_simple(thread_id, tool_outputs)` — `run_id` resolved server-side.
 
 ---
 
 ## 13. Open decisions / TODO
 
 - [ ] Confirm chassis and motor driver, plus power/battery (critical path).
-- [ ] Confirm camera + compute: OAK-D + Pi (default) vs a GPU host if using NoMaD.
-- [ ] Decide whether to use Backboard memory (optional, strong demo beat).
-- [ ] Decide whether to attempt the Baseten command-parser fine-tune (side quest, only after the robot works).
-- [ ] Smoke-test all four cloud keys before building.
-- [ ] Scaffold repo, fill in section 12 commands.
+- [ ] Wire OAK-D camera pipeline (`perception/camera.py` has stubs).
+- [ ] Wire real sensors: temperature (DHT22/DS18B20), IMU (MPU6050/OAK-D onboard), audio classification.
+- [ ] Wire `publish_cmd_vel` to real motors (currently no-op lambda in `main.py`).
+- [ ] Wire GPIO push-to-talk button (pin 17).
+- [ ] Get Baseten booth access: RTX-PRO-6000 (deploy Whisper) + H100 (run fine-tune).
+- [ ] Submit prize selections on Devpost by 2:00 PM EDT Saturday.
+- See TODO.md for the full action item list.

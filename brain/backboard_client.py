@@ -1,7 +1,10 @@
 """Thin wrapper around the Backboard SDK: one persistent thread/assistant across ticks.
 
-VERIFY (BACKBOARD.md section 12): confirm `send_message`/`submit_tool_outputs_simple`
-signatures against the installed `backboard-sdk` version before relying on this.
+SDK verified against backboard-sdk v1.5.19:
+- send_message returns ChatMessagesResponse (convenience properties proxy to last message)
+- submit_tool_outputs_simple takes thread_id + tool_outputs list
+- input_image= for vision (not files=)
+- call.function.arguments is a JSON string (not parsed_arguments)
 """
 
 import asyncio
@@ -44,8 +47,9 @@ class BackboardBrain:
         while response.status == "REQUIRES_ACTION" and rounds < MAX_TOOL_ROUNDS:
             tool_outputs = []
             for call in response.tool_calls:
-                result = execute_tool(call.function.name, call.function.parsed_arguments)
-                results.append({"name": call.function.name, "arguments": call.function.parsed_arguments, "result": result})
+                args = json.loads(call.function.arguments)
+                result = execute_tool(call.function.name, args)
+                results.append({"name": call.function.name, "arguments": args, "result": result})
                 tool_outputs.append({"tool_call_id": call.id, "output": json.dumps(result)})
 
             response = await self.client.submit_tool_outputs_simple(
@@ -61,7 +65,7 @@ class BackboardBrain:
     async def _describe(self, content: str, image_path: str, llm_provider: str, model_name: str) -> str:
         response = await self.client.send_message(
             content=content,
-            files=[image_path],  # VERIFY: SDK's files= kwarg vs. raw HTTP multipart (BACKBOARD.md section 12)
+            input_image=image_path,
             llm_provider=llm_provider,
             model_name=model_name,
             thread_id=self.thread_id,
