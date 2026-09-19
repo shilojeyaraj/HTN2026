@@ -169,10 +169,11 @@ A minimal onboard node: read depth / detections, emergency-stop and simple avoid
 
 ## 8. Hardware
 
-- **Host / compute:** Raspberry Pi 5 (4 GB) for ROS 2, capture/playback, the agent loop, and cloud calls. NoMaD (section 7) needs a Jetson Orin Nano or a tethered laptop GPU instead.
-- **Camera (primary):** Luxonis OAK-D S2 (on-camera AI, pairs with the Pi, gives depth + on-device detection). Alternative: ZED 2 only if an NVIDIA host is available (better odometry, higher setup risk).
+- **Host / compute:** Raspberry Pi 5 Model B Rev 1.0 (4 GB) for capture/playback, the agent loop, and cloud calls. A laptop on the same Wi-Fi runs monocular depth (Depth-Anything-V2-Small) and sends results back over TCP. No GPU on the Pi.
+- **Camera (primary):** Pi CSI camera (`rpicam-vid`), 640x480 MJPEG at 15 fps. No OAK-D, no LiDAR. Depth is relative (monocular), not absolute meters — see CAMERA_GAP.md for the conversion and its limitations.
 - **Audio:** USB webcam mic (capture), powered USB/BT speaker (playback), push button (push-to-talk). Avoid analog "sound sensor" modules; they only detect loudness.
 - **Chassis:** differential-drive base + motor driver. **TODO: confirm** (DJI Robomaster, ESP32 car kits, custom base, or Bracket Bot base if we chase that track).
+- **Depth pipeline:** Pi captures JPEG → TCP to laptop → Depth-Anything-V2-Small → proximity scores {left, center, right} → back to Pi → converted to pseudo-Detection objects. See `perception/camera.py`, `laptop/server.py`, `pi/client.py`, `shared/protocol.py`.
 
 ---
 
@@ -180,7 +181,7 @@ A minimal onboard node: read depth / detections, emergency-stop and simple avoid
 
 - **Python** primary.
 - **ROS 2** (Jazzy on 24.04, or Humble on 22.04). Motor commands are `Twist` on `/cmd_vel`.
-- **Camera SDK:** DepthAI (OAK-D).
+- **Camera SDK:** rpicam-vid (CSI) + Depth-Anything-V2-Small on laptop (monocular depth over TCP). See CAMERA_GAP.md.
 - **Brain:** Backboard SDK (`backboard-sdk`). Direct clients for Gemini, ElevenLabs, Baseten (all OpenAI-compatible where it matters, so each is a `(base_url, model)` pair).
 - **Reflex controller:** minimal custom ROS 2 node. Nav2 optional if odometry is solid.
 
@@ -278,10 +279,8 @@ baseten train checkpoint deploy --job-id <id>            # deploy checkpoint →
 ## 13. Open decisions / TODO
 
 - [ ] Confirm chassis and motor driver, plus power/battery (critical path).
-- [ ] Confirm camera + compute: OAK-D + Pi (default) vs a GPU host if using NoMaD.
-- [ ] Decide whether to use Backboard memory (optional, strong demo beat).
-- [ ] Decide whether to attempt the Baseten command-parser fine-tune (side quest, only after the robot works).
-- [ ] Wire real sensors: temperature (DHT22/DS18B20), IMU (MPU6050/OAK-D onboard), audio classification.
+- [ ] Add a real distance sensor (ultrasonic/ToF) for onboard obstacle avoidance when Wi-Fi depth is stale — see CAMERA_GAP.md.
+- [ ] Wire real sensors: temperature (DHT22/DS18B20), IMU (MPU6050), audio classification.
 - [ ] Wire `publish_cmd_vel` to real motors (currently no-op lambda in `main.py`).
 - [ ] Wire GPIO push-to-talk button (pin 17).
 - [ ] Get Baseten booth access: RTX-PRO-6000 (deploy Whisper) + H100 (run fine-tune).
