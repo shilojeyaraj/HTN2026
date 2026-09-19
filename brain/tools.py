@@ -82,14 +82,6 @@ VERBS = [
     {
         "type": "function",
         "function": {
-            "name": "get_distance",
-            "description": "Read the ultrasonic distance sensors for real obstacle distance in meters. Returns front_m, left_m, and right_m (null if that sensor isn't connected). More accurate than get_obstacles for close-range distance — use this when you need to know exactly how far away something is.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "look_around",
             "description": "Call the vision agent to describe the current scene. Use when you need to re-examine your surroundings after moving or when you want a fresh visual assessment.",
             "parameters": {"type": "object", "properties": {}},

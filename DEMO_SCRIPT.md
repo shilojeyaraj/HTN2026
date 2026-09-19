@@ -77,7 +77,7 @@ python control/demo_map.py
 - Trail appears behind the rover (green gradient line)
 - Sensor cone sweeps ahead (semi-transparent cyan)
 
-**You say:** "Watch the map build in real-time. Six sensor types fuse into one occupancy grid — ultrasonic, camera depth, audio, heat, hazards, and Gemini's scene descriptions. The rover knows where it's been and what's around it."
+**You say:** "Watch the map build in real-time. Five sensor types fuse into one occupancy grid — camera depth, audio, heat, hazards, and Gemini's scene descriptions. The rover knows where it's been and what's around it."
 
 **You say:** "The brain is calling tools as it goes — `get_obstacles` to check what's ahead, `check_map` to see what's nearby, `look_around` to get a fresh scene description from Gemini Flash. All of these are Backboard tool calls, fed back through Inner Monologue so the brain reacts to what it finds."
 
@@ -117,7 +117,7 @@ python control/demo_map.py
 
 ### 3:45 — Multi-Agent Recap (45 seconds)
 
-**You say:** "Here's the architecture. The rover's brain is a team of 9 agents across 3 machines. A Leader agent on Backboard — that's Gemini Pro — coordinates 8 teammates: a Vision agent using Gemini Flash for scene understanding, a Parser using a Qwen3 model we fine-tuned on Baseten for fast voice commands, a Safety agent that can veto unsafe moves, a Reflex agent running at 30 Hz on the Pi for emergency stops, a Mapper fusing 6 sensor types into a live occupancy grid, a Pose agent doing dead-reckoning, an STT agent running local whisper for always-on speech, and a TTS agent using ElevenLabs for voice output."
+**You say:** "Here's the architecture. The rover's brain is a team of 9 agents across 3 machines. A Leader agent on Backboard — that's Gemini Pro — coordinates 8 teammates: a Vision agent using Gemini Flash for scene understanding, a Parser using a Qwen3 model we fine-tuned on Baseten for fast voice commands, a Safety agent that can veto unsafe moves, a Reflex agent running at 30 Hz on the Pi for emergency stops, a Mapper fusing 5 sensor types into a live occupancy grid, a Pose agent doing dead-reckoning, an STT agent running local whisper for always-on speech, and a TTS agent using ElevenLabs for voice output."
 
 **You say:** "They coordinate through shared state, a transcript buffer, a priority arbiter, and a live spatial map. The safety agent can veto the Leader at any time. The reflex loop overrides everything if something goes wrong. It's distributed across the Pi, the laptop, and the cloud — genuine multi-agent collaboration, not chained prompts."
 

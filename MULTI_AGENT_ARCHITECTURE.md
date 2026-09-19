@@ -57,7 +57,7 @@ The rover is a heterogeneous multi-agent system for autonomous rescue operations
 - **Model:** Classical (no LLM, no cloud)
 - **Location:** Pi (onboard, 30 Hz)
 - **Role:** Emergency stop and obstacle avoidance with final authority over motor commands
-- **Input:** Latest detections from camera/ultrasonic
+- **Input:** Latest detections from camera depth
 - **Output:** Override `cmd_vel` (zero speed) when obstacle within 0.3m, or `None` (let brain through)
 - **Key feature:** Runs at 30 Hz independent of the brain. Wins at the arbiter. Also updates the Pose Agent every tick. Network-independent — keeps the rover safe even if all cloud calls fail.
 - **File:** `control/reflex.py`
@@ -65,10 +65,10 @@ The rover is a heterogeneous multi-agent system for autonomous rescue operations
 ### 7. Mapper Agent — Spatial Fusion
 - **Model:** Classical (numpy, no LLM)
 - **Location:** Pi (onboard)
-- **Role:** Fuse six sensor types into a 2D occupancy grid with log-odds confidence
+- **Role:** Fuse five sensor types into a 2D occupancy grid with log-odds confidence
 - **Input:** Ultrasonic distances, camera depth proximity, audio events, temperature, IMU readings, Gemini scene descriptions
 - **Output:** Occupancy grid + overlay layers (sound markers, heat points, hazards, annotations, trail) → serialized to JSON → WebSocket at 5 Hz → frontend
-- **Key feature:** Log-odds Bresenham ray-casting handles conflicting sensor readings with different confidence weights. High-confidence ultrasonic dominates low-confidence depth.
+- **Key feature:** Log-odds Bresenham ray-casting handles conflicting sensor readings with different confidence weights. Camera depth proximity scores map to occupancy with weighted log-odds deltas.
 - **File:** `control/mapper.py`, `control/map_server.py`
 
 ### Supporting: Pose Agent
@@ -111,7 +111,7 @@ The rover is a heterogeneous multi-agent system for autonomous rescue operations
 
 ```
 Reflex Agent (30 Hz)
-  ├── Read detections (camera/ultrasonic)
+  ├── Read detections (camera depth)
   ├── If obstacle within 0.3m → override cmd_vel to (0, 0)
   ├── Else → let brain's command through
   └── Update Pose Agent every tick
