@@ -1,4 +1,4 @@
-"""CSI JPEG -> relative depth -> three proximity estimates. No motor control."""
+"""Webcam video/audio preview and optional relative depth. No motor control."""
 
 import argparse
 from collections import deque
@@ -12,7 +12,7 @@ import threading
 import numpy as np
 from PIL import Image
 
-from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
+from shared.protocol import AUDIO_PREFIX, MAX_FRAME, MAX_RESULT, audio_samples, receive, send
 
 MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
 
@@ -53,7 +53,7 @@ def load_model(device):
     return infer
 
 
-def handle_connection(conn, infer, show_frame=lambda image: None):
+def handle_connection(conn, infer, show_frame=lambda image: None, play_audio=lambda samples: None):
     pending = deque(maxlen=1)
     condition = threading.Condition()
     stopped = threading.Event()
@@ -64,6 +64,9 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
         try:
             while not stopped.is_set():
                 jpeg = receive(conn, MAX_FRAME)
+                if jpeg.startswith(AUDIO_PREFIX):
+                    play_audio(audio_samples(jpeg))
+                    continue
                 frame_id += 1
                 received_at = time.monotonic()
                 try:
@@ -125,6 +128,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--no-preview", action="store_true", help="run without a desktop window")
     parser.add_argument("--no-depth", action="store_true", help="preview only; skip model loading and inference")
+    parser.add_argument("--mute", action="store_true", help="receive audio without playing it")
     args = parser.parse_args()
     if not np.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
@@ -137,6 +141,8 @@ def main():
 
 
 def serve(args, show_frame=lambda image: None):
+    from laptop.audio import audio_playback
+
     infer = None if args.no_depth else load_model(args.device)
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
@@ -150,7 +156,8 @@ def serve(args, show_frame=lambda image: None):
                 conn.settimeout(args.timeout)
                 logging.info("Pi connected: %s", address)
                 try:
-                    handle_connection(conn, infer, show_frame)
+                    with audio_playback(args.mute) as play_audio:
+                        handle_connection(conn, infer, show_frame, play_audio)
                 except (EOFError, OSError, ValueError) as exc:
                     logging.info("Client disconnected: %s", exc)
                     show_frame(None)

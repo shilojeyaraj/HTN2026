@@ -1,4 +1,4 @@
-"""Full-duplex TCP: uint32 big-endian length + JPEG upstream / JSON downstream.
+"""Full-duplex TCP: uint32 length + JPEG or PCM1/audio upstream, JSON downstream.
 
 Depth replies identify the 1-based received frame_id; unsampled frames have no reply.
 """
@@ -7,6 +7,16 @@ import struct
 
 MAX_FRAME = 2 * 1024 * 1024
 MAX_RESULT = 8192
+AUDIO_PREFIX = b"PCM1"
+AUDIO_RATE = 16000
+AUDIO_CHUNK = 640  # 20 ms, mono signed 16-bit little-endian PCM.
+
+
+def audio_samples(payload):
+    samples = payload[len(AUDIO_PREFIX):]
+    if not payload.startswith(AUDIO_PREFIX) or not 0 < len(samples) <= AUDIO_CHUNK or len(samples) % 2:
+        raise ValueError("invalid PCM audio packet")
+    return samples
 
 
 def recv_exact(sock, size):
