@@ -1,5 +1,7 @@
 .env
 .venv/
+venv/
+/test/*.jpg
 __pycache__/
 *.pyc
 .DS_Store

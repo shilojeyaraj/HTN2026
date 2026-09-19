@@ -1,6 +1,17 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Current hardware / first milestone (2026-09-19 update)
+
+User-confirmed setup supersedes the older OAK-D/ROS assumptions below:
+Pi 5 Model B Rev 1.0, one working CSI camera (`rpicam-*`), GPS, motors/sensors
+pending. LiDAR is unavailable. Pi captures frames and handles future hardware
+I/O; laptop performs monocular depth over Wi-Fi. The standalone `pi/`,
+`laptop/`, and `shared/` TCP pipeline and commands are documented in README.md.
+Pi hostname `htn2026`, user `mainuser`, last IP `172.20.10.11` on an iPhone
+hotspot. Depth is relative and results are advisory only; this pipeline is
+not wired to the old camera interface, reflex loop, or motors. Preserve the
+onboard watchdog and independent safety requirements before adding motion.
 
 Project context for an autonomous voice-interactive rover built at Hack the North 2026.
 Single source of truth for the build. Companion docs: **ARCHITECTURE.md** (data flow diagrams), **BACKBOARD.md** (the brain's API), **PRIZE_TRACKS.md** (sponsor tracks), **BUILD_PLAN.md** (phased build status), **TODO.md** (outstanding action items). Read CLAUDE.md and ARCHITECTURE.md before writing code.
@@ -264,7 +275,9 @@ baseten train checkpoint deploy --job-id <id>            # deploy checkpoint →
 ## 13. Open decisions / TODO
 
 - [ ] Confirm chassis and motor driver, plus power/battery (critical path).
-- [ ] Wire OAK-D camera pipeline (`perception/camera.py` has stubs).
+- [ ] Confirm camera + compute: OAK-D + Pi (default) vs a GPU host if using NoMaD.
+- [ ] Decide whether to use Backboard memory (optional, strong demo beat).
+- [ ] Decide whether to attempt the Baseten command-parser fine-tune (side quest, only after the robot works).
 - [ ] Wire real sensors: temperature (DHT22/DS18B20), IMU (MPU6050/OAK-D onboard), audio classification.
 - [ ] Wire `publish_cmd_vel` to real motors (currently no-op lambda in `main.py`).
 - [ ] Wire GPIO push-to-talk button (pin 17).
