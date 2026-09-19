@@ -2,6 +2,7 @@
 .venv/
 venv/
 /test/*.jpg
+/.cache/
 __pycache__/
 *.pyc
 .DS_Store

@@ -5,14 +5,15 @@ Autonomous voice-interactive rover built at Hack the North 2026. See [CLAUDE.md]
 ## Current milestone: USB webcam + microphone → laptop
 
 A USB webcam plugs into the Pi 5. Its video and microphone audio stream to
-one laptop over TCP. The laptop opens a live video window and plays microphone
-audio through its normal output device. Optional monocular depth runs independently.
+one laptop over TCP. The laptop opens a live video window and transcribes microphone audio locally.
+Recognized text appears below the video and as JSON in the laptop terminal.
+Optional monocular depth runs independently. There is no audio playback.
 Nothing is recorded to disk. Run commands from the repository root.
 
 ### 1. Laptop
 
-FFmpeg/ffplay must be installed for live audio (`sudo apt install ffmpeg` on
-Debian/Ubuntu). This laptop already has them. Python setup:
+The laptop needs the Python dependencies below; ffplay is no longer used.
+The Pi still needs FFmpeg for webcam/microphone capture. Python setup:
 
 ```sh
 python3 -m venv .venv
@@ -32,8 +33,9 @@ remove it to enable [Depth Anything V2 Small](https://huggingface.co/depth-anyth
 If the model cache points to unwritable `/opt/hf-cache`, prefix the command
 with `HF_HOME=/tmp/htn2026-hf` to use the existing downloaded test cache.
 CPU is the default; `--device cuda` / `--device mps` select supported accelerators.
-`--mute` receives audio without playing it. `--no-preview` hides video but does
-not mute audio. Tkinter/Pillow provide the desktop preview; Python needs Tk
+`--no-transcription` skips speech model loading and discards received audio.
+`--no-preview` hides video but keeps terminal transcription. The old `--mute`
+flag is removed because audio is never played. Tkinter/Pillow provide the desktop preview; Python needs Tk
 support (`python3-tk` on Debian/Ubuntu, or Tk support in a custom Python build).
 
 Both devices must be on the same network. Allow inbound TCP port 8765 if
@@ -57,7 +59,7 @@ on the Pi; there are no Python package dependencies there.
 sudo apt update
 sudo apt install ffmpeg v4l-utils alsa-utils
 v4l2-ctl --list-devices
-v4l2-ctl --device /dev/video0 --list-formats-ext
+v4l2-ctl --device /dev/video8 --list-formats-ext
 arecord -l
 ```
 
@@ -67,12 +69,12 @@ are independent. A webcam without a built-in mic needs a separate USB mic.
 
 ### 4. Start on the Pi
 
-For example, **if** the webcam is `/dev/video0` and its microphone is ALSA
-card 1, device 0:
+The confirmed devices for this Pi are `/dev/video8` and microphone card 2,
+device 0. Device numbers may change after reconnecting USB hardware:
 
 ```sh
 cd ~/HTN2026
-python3 -m pi.client --host 172.20.10.3 --video-device /dev/video0 --audio-device plughw:1,0 --fps 15
+python3 -m pi.client --host 172.20.10.3 --video-device /dev/video8 --audio-device plughw:2,0 --fps 15
 ```
 
 Replace these device names and the laptop IP with the actual values.
@@ -99,24 +101,54 @@ errors are printed by FFmpeg; check the device arguments if either fails.
 between depth replies. The client reconnects after failures and terminates
 both capture processes on exit.
 
-### Live preview and audio
+### Live preview and transcription
 
 The window opens on the first valid video frame, and its title reports display
-FPS. Audio plays automatically on the laptop. Close the window or press Escape
+FPS. Transcripts appear after a pause in speech; they are not word-by-word
+streaming captions. Close the window or press Escape
 to stop the server. Old images in `test/` are left alone; no new images or audio
 files are saved on either device.
 
-Video capture, audio capture, network transmission, preview, playback, and depth
-run independently. Queues retain the latest video and at most 200 ms of pending
+Video capture, audio capture, network transmission, preview, transcription,
+and depth run independently. Queues retain the latest video and at most 200 ms of pending
 audio; older queued data is dropped under load. TCP and the audio device may add
-further latency. This is live monitoring with separate audio/video clocks,
-**not guaranteed lip-synchronized playback**. Use a timestamped media container
-if tight A/V synchronization becomes necessary. The audio is not yet connected
-to speech recognition or the robot brain.
+further latency. Speech processing has its own bounded queue described below.
+Transcripts are informational; they do not call the reasoning model or motors.
 
 The implementation uses FFmpeg's [V4L2 and ALSA inputs](https://ffmpeg.org/ffmpeg-devices.html)
-and [ffplay](https://ffmpeg.org/ffplay.html) for playback. No new pip packages
-are required for webcam/audio capture or playback.
+and [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for local
+CPU INT8 transcription (two inference threads). Install the updated laptop
+requirements before restarting; no Pi changes or re-sync are needed for STT.
+
+### Transcription setup and tuning
+
+```sh
+venv/bin/python -m pip install -r laptop/requirements.txt
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth
+```
+
+The first start downloads the English `base.en` speech model into the ignored
+project folder `.cache/whisper/`. Wait for `Ready`; after download, recognition
+runs entirely on the laptop. Audio is not sent to a cloud transcription API.
+`--stt-cache /writable/path` changes the cache. Use `--stt-model tiny.en` for
+less compute, `small.en` for a larger English model, or `base` for multilingual
+speech. These tradeoffs need testing with the actual microphone/noise level.
+
+We keep 200 ms of audio before speech starts, finish an utterance after 0.7 s
+of quiet, and split continuous speech at 10 s. Very short sounds (<200 ms)
+are ignored. A simple RMS gate starts/stops clips; Whisper's VAD additionally
+filters each clip. `--speech-threshold 0.015` controls the RMS gate: lower it
+for quiet speech, raise it if background noise keeps triggering recognition.
+The 10-second cap can split words; this is a minimal utterance-based pipeline.
+
+Up to two completed utterances can wait behind the active transcription.
+If inference falls behind, the oldest pending utterance is dropped with a
+warning so video remains responsive. Disconnect flushes the last utterance
+and drains the queue before accepting another Pi. No audio or transcript
+files are created; terminal JSON is `{"type":"transcript","text":"..."}`.
+The preview displays the newest transcript. Silence produces no text output.
+Speech recognition can make mistakes, especially in noisy rooms; these texts
+are not authorized movement commands.
 
 ### Depth results
 
@@ -148,9 +180,10 @@ python3 -m pi.client --host 127.0.0.1 --image /path/to/photo.jpg --once
 
 Checks cover fragmented TCP/MJPEG, length limits, invalid audio/JPEG handling,
 process cleanup, and audio/video delivery while depth is blocked. They do not
-verify physical USB hardware. A synthetic FFmpeg capture/playback integration
+verify physical USB hardware. A synthetic FFmpeg capture/transcription integration
 check is also available as `python3 -m unittest test_webcam_audio` (requires
-ffmpeg/ffplay; uses silent audio output and no webcam or microphone).
+ffmpeg; uses synthetic devices and a stub recognizer). Speech segmentation and
+queue behavior are checked with `python3 -m unittest test_transcription`.
 
 Wire format: uint32 big-endian payload length, followed by JPEG bytes **or**
 `PCM1` + mono signed 16-bit little-endian audio at 16 kHz (up to 640 audio bytes,

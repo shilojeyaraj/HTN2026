@@ -15,19 +15,24 @@ def run_preview(serve):
     root.withdraw()  # Open automatically on the first received frame.
     label = tk.Label(root)
     label.pack()
+    caption = tk.Label(root, text="Waiting for speech…", wraplength=640, justify="left")
+    caption.pack(fill="x")
+    transcripts = deque(maxlen=1)
     pending = deque(maxlen=1)  # Display only the newest frame, never build a backlog.
     frames = 0
     measured_at = time.monotonic()
 
     def worker():
         try:
-            serve(pending.append)
+            serve(pending.append, transcripts.append)
         except Exception as exc:
             logging.exception("Camera server stopped")
             pending.append(f"Server stopped: {exc}")
 
     def update():
         nonlocal frames, measured_at
+        if transcripts:
+            caption.configure(text=transcripts.popleft())
         try:
             frame = pending.popleft()
         except IndexError:

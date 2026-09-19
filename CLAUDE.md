@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 User-confirmed setup supersedes the older OAK-D/ROS assumptions below:
 Pi 5 Model B Rev 1.0, USB webcam plus microphone (replacing the CSI camera),
 GPS, motors/sensors pending. FFmpeg captures V4L2 video and ALSA audio on the
-Pi; the laptop displays video and plays audio with ffplay, with optional depth. LiDAR is unavailable. Pi captures frames and handles future hardware
+Pi; the laptop displays video and transcribes audio locally with faster-whisper
+(CPU INT8, base.en default), with optional depth. No live audio playback; text
+appears in the preview and terminal. Transcripts are not yet wired to the brain. LiDAR is unavailable. Pi captures frames and handles future hardware
 I/O; laptop performs monocular depth over Wi-Fi. The standalone `pi/`,
 `laptop/`, and `shared/` TCP pipeline and commands are documented in README.md.
 Pi hostname `htn2026`, user `mainuser`, last IP `172.20.10.11` on an iPhone

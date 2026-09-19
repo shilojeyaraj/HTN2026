@@ -1,10 +1,11 @@
-"""Webcam video/audio preview and optional relative depth. No motor control."""
+"""Webcam preview, local speech transcription, and optional depth. No motor control."""
 
 import argparse
 from collections import deque
 import io
 import json
 import logging
+from pathlib import Path
 import socket
 import time
 import threading
@@ -53,7 +54,7 @@ def load_model(device):
     return infer
 
 
-def handle_connection(conn, infer, show_frame=lambda image: None, play_audio=lambda samples: None):
+def handle_connection(conn, infer, show_frame=lambda image: None, receive_audio=lambda samples: None):
     pending = deque(maxlen=1)
     condition = threading.Condition()
     stopped = threading.Event()
@@ -65,7 +66,7 @@ def handle_connection(conn, infer, show_frame=lambda image: None, play_audio=lam
             while not stopped.is_set():
                 jpeg = receive(conn, MAX_FRAME)
                 if jpeg.startswith(AUDIO_PREFIX):
-                    play_audio(audio_samples(jpeg))
+                    receive_audio(audio_samples(jpeg))
                     continue
                 frame_id += 1
                 received_at = time.monotonic()
@@ -128,22 +129,32 @@ def main():
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--no-preview", action="store_true", help="run without a desktop window")
     parser.add_argument("--no-depth", action="store_true", help="preview only; skip model loading and inference")
-    parser.add_argument("--mute", action="store_true", help="receive audio without playing it")
+    parser.add_argument("--no-transcription", action="store_true", help="skip speech model and discard audio")
+    parser.add_argument("--stt-model", default="base.en", help="faster-whisper model name or local model path")
+    parser.add_argument("--stt-cache", type=Path, default=Path(__file__).resolve().parent.parent / ".cache" / "whisper")
+    parser.add_argument("--speech-threshold", type=float, default=0.015, help="speech RMS threshold, 0–1")
     args = parser.parse_args()
     if not np.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
+    if not np.isfinite(args.speech_threshold) or not 0 < args.speech_threshold < 1:
+        parser.error("speech threshold must be between 0 and 1")
     logging.basicConfig(level=logging.INFO)
     if args.no_preview:
         serve(args)
     else:
         from laptop.preview import run_preview
-        run_preview(lambda show_frame: serve(args, show_frame))
+        run_preview(lambda show_frame, show_text: serve(args, show_frame, show_text))
 
 
-def serve(args, show_frame=lambda image: None):
-    from laptop.audio import audio_playback
+def serve(args, show_frame=lambda image: None, show_text=lambda text: None):
+    from laptop.audio import audio_transcription, load_transcriber
 
+    transcribe = None if args.no_transcription else load_transcriber(args.stt_model, args.stt_cache)
     infer = None if args.no_depth else load_model(args.device)
+
+    def transcript(text):
+        print(json.dumps({"type": "transcript", "text": text}, ensure_ascii=False), flush=True)
+        show_text(text)
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -156,8 +167,8 @@ def serve(args, show_frame=lambda image: None):
                 conn.settimeout(args.timeout)
                 logging.info("Pi connected: %s", address)
                 try:
-                    with audio_playback(args.mute) as play_audio:
-                        handle_connection(conn, infer, show_frame, play_audio)
+                    with audio_transcription(transcribe, transcript, args.speech_threshold) as receive_audio:
+                        handle_connection(conn, infer, show_frame, receive_audio)
                 except (EOFError, OSError, ValueError) as exc:
                     logging.info("Client disconnected: %s", exc)
                     show_frame(None)
