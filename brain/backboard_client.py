@@ -15,6 +15,7 @@ MAX_TOOL_ROUNDS = 6
 # ElevenLabs voice, BYOK'd within Backboard (PRIZE_TRACKS.md). TODO: swap for the actual
 # voice picked from the ElevenLabs dashboard.
 TTS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
+TTS_MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
 
 
 class BackboardBrain:
@@ -84,7 +85,7 @@ class BackboardBrain:
         # question itself". VERIFY this flag actually does that against the live SDK.
         response = await self.client.send_message(
             content=text,
-            voice={"tts": {"provider": "elevenlabs", "voice": TTS_VOICE_ID}},
+            voice={"tts": {"provider": "elevenlabs", "model": TTS_MODEL_ID, "voice": TTS_VOICE_ID}},
             llm_provider=self.llm_provider,
             model_name=self.model_name,
             thread_id=self.thread_id,
