@@ -1,0 +1,104 @@
+# PRIZE_TRACKS.md
+
+Sponsor prize tracks for the Hack the North 2026 rover, with each track's scope and how our project targets it. Companion to CLAUDE.md and BACKBOARD.md. Prize selections must be submitted on Devpost by **2:00 PM EDT Saturday**, so one person owns that.
+
+Judging is a **live demo** (not slides), scored on WOW factor, technical ability, originality, and design. The robot must physically move.
+
+---
+
+## Committed tracks (build toward these five)
+
+The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **directly and visibly**. If they are just models Backboard routes to under the hood, the claim is weak and possibly disqualifying, because those judges want to see their own API in the project. So each sponsor gets a **distinct, separately-demoable slice** that does not overlap. That means routing some pieces around Backboard on purpose.
+
+### Backboard.io: Built on Backboard
+- **Prize:** guaranteed internship interviews, $400 per team, swag. 1 winner.
+- **Scope:** build anything, the only rule is it runs on Backboard. Text, image, voice, 17,000+ models, memory, RAG, embeddings, tool calling, web search, one API. Judged on ambition; the more of the stack you use, the better the odds.
+- **Our role for it:** the brain core. Agent loop, tool calling, thread state, planner model routing, voice-in (STT, revised — see the Baseten entry below), and (recommended) memory. This is where the "whole stack in one key" story lives.
+
+### Rox: Best AI Agent
+- **Prize:** $10K first, $2K second. 2 winners. (Biggest cash on the board.)
+- **Scope:** an LLM-driven agent operating on real-world messy data (unstructured, incomplete, conflicting, noisy) that takes meaningful actions. Rewards data cleaning/validation, multi-source resolution, error handling, decision-making under uncertainty. Judged on technical complexity, creativity, handling messiness, practical utility.
+- **Our role for it:** pitch framing, no extra code. A rover acting on noisy, incomplete sensor data under uncertainty is exactly the ask.
+
+### Gemini: MLH Best Use of Gemini API
+- **Prize:** Google Swag Kits. 1 winner.
+- **Scope:** push the boundaries of what is possible with the Gemini API.
+- **Our role for it:** vision / scene understanding, called **directly** via the Gemini API. Its multimodal is best-in-class, so this is a legitimate best use, not a token call.
+
+### ElevenLabs: MLH Best Use of ElevenLabs
+- **Prize:** wireless earbuds. 1 winner.
+- **Scope:** natural, human-sounding, emotionally expressive voice.
+- **Our role for it:** voice out, called **directly**. The rover's spoken voice narrating decisions and answering commands.
+
+### Baseten: Best Use of Baseten
+- **Prize (per member):** Grand: SF trip + final-round interviews + $200 credits + signed *Inference Engineering*. Runner-up: AirPods 4 + $100 credits + book. 2 winners.
+- **Scope:** creative, meaningful use of Baseten (inference or training).
+- **Our role for it (revised):** train, not just infer. Capture real-world video/frames from the rover's own camera at the event, fine-tune a small vision model on Baseten's H100 workstations (visit the booth to enable), and deploy it on Baseten for inference back on the robot. This is a stronger, more literal claim on the track's "inference or training" scope than hosting a stock model, and it ties Baseten directly to the robot's own embodiment story instead of a generic STT call.
+  - **What it's for:** a distinct slice from Gemini's general scene description — a specialized classifier/detector tuned to *this specific venue/objects*, feeding an extra signal into the planner alongside the Gemini scene description. Exact task (object classes, detection vs. classification) depends on what footage is practical to capture and label in the time available; decide once you see how much time is left for data collection.
+  - **Voice-in moves off Baseten as a result** — see the Backboard entry below.
+
+**Cost of this division:** routing vision-for-planning to Gemini and voice-out to ElevenLabs directly means those pieces bypass Backboard, so we use slightly less of Backboard's stack. Voice-in now goes through Backboard's own STT instead, which claws some of that back. Backboard still owns orchestration, planner routing, tools, memory, and now voice-in.
+
+---
+
+## Stacks cleanly (add if the base build is solid)
+
+### Huawei: openJiuwen Multi-Agent Challenge
+- **Prize (per member):** 1st Huawei Watch GT 6 + internship opportunity at Huawei Toronto Research Center (subject to interview); 2nd FreeClip 2 Earbuds + office tour. Up to $40 team API credits. 2 winners.
+- **Scope:** a functional multi-agent app solving a real problem through genuine collaboration (task decomposition, communication, tool use, coordination), not chained prompts. Building on JiuwenSwarm/WorkSwarm is encouraged, not required.
+- **Our role for it:** per-role model routing on Backboard (scene, planner, safety as coordinating agents) is a real heterogeneous multi-agent system. Highest-value Huawei prize and it fits the architecture.
+
+### Bracket Bot: Best Use of Bracket Bot Hardware
+- **Prize:** 1st 4x Bambu A1 Mini + 4x SO-101 kits; 2nd 4x SO-101 kits; 3rd 4x SO-101 robots. 3 winners.
+- **Scope:** use Bracket Bot to interact with the physical world (navigation, voice, manipulation, teleoperation). Robot must be essential to the idea.
+- **Our role for it:** only if we build on their robot base instead of a scratch rover. Independent of the brain stack, so it stacks freely. De-risks the mechanical build.
+
+### MLH: Best Use of Tiger Data
+- **Prize:** Stream Deck Mini. 1 winner.
+- **Scope:** PostgreSQL extended for real-time data, time-series, dashboards (IoT monitoring, analytics).
+- **Our role for it:** a rover is a sensor-stream firehose. Log telemetry, live dashboard. Cheap add-on, independent of the brain.
+
+---
+
+## Ruled out (conflict with a cloud Backboard brain)
+
+### Huawei: OMNI Live Challenge
+- **Prize (per member):** Watch GT 6 / FreeClip 2 + office tour. 2 winners.
+- **Scope:** real-time multimodal edge app using Huawei's OMNI model as the core, incorporating vision, speech, and language end-to-end.
+- **Why not:** requires OMNI as the multimodal core, which competes with Backboard for the same slot. Pivoting here means tearing out routing, voice, memory, and tools and rebuilding around one required model. Weaker prize than the Backboard + openJiuwen path.
+
+### QNX: Embedded System with QNX that Uses AI
+- **Scope:** QNX OS + an open-source AI module, running on embedded hardware or the QNX VM, **not the cloud**.
+- **Why not:** the no-cloud requirement rules out a cloud brain entirely.
+
+---
+
+## Separate projects (fit our background, not this robot)
+
+### Dryft Company Challenge
+- **Prize:** $2000. Make an autoregressive transformer generate tokens as fast as possible (Triton kernels, op fusion, memory layouts). Runs on H100s, correctness-tested, benchmarked on hidden workloads. Standalone, only if a teammate can carry the rover.
+
+### Dominion Dynamics: WHITEOUT
+- **Prize:** $2000 / $1000 / $500 + guaranteed first-round interview. 3 winners. Live Arctic sim coordinating a fleet (aircraft, quadcopters, rovers, sensor towers) over MAVLink to track a target. Multi-agent autonomy, but a separate scored challenge, not this build.
+
+---
+
+## Build order (let the bottom fall off if time runs short)
+
+Each layer is an additive bonus track on a robot that already works, not a dependency that can sink the demo.
+
+1. **Robot drives with the onboard reflex loop.** Safety floor, no cloud.
+2. **Backboard brain.** Qualifies Backboard and Rox on its own.
+3. **Gemini vision** (direct). Adds the Gemini track.
+4. **ElevenLabs voice out** (direct). Adds the ElevenLabs track.
+5. **Baseten STT** (direct). Adds the Baseten track.
+6. **openJiuwen framing** (multi-agent routing) and any add-ons (Bracket Bot base, Tiger Data dashboard).
+
+Realistic focused stack on one robot: **Backboard + Rox + Gemini + ElevenLabs + Baseten**, with **openJiuwen** as the clean Huawei co-pitch and Bracket Bot / Tiger Data as low-cost extras.
+
+---
+
+## Admin
+
+- Submit prize selections on Devpost by **2:00 PM EDT Saturday**. Assign an owner.
+- Confirm eligibility on any track where it matters (for example, sponsor-employee/intern rules).
