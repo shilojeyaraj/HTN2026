@@ -1,99 +1,76 @@
-"""Optional local Matroska recording; copy JPEG and PCM without re-encoding."""
+"""Optional per-session silent MP4, WAV, and finalized transcript files."""
 
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from fractions import Fraction
 import logging
 from pathlib import Path
 import time
-from uuid import uuid4
+import wave
 
 from shared.protocol import AUDIO_RATE
 
 
 class Recording:
     def __init__(self, directory):
-        self.directory = Path(directory)
+        name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+        self.path = Path(directory) / name
+        self.path.mkdir(parents=True, exist_ok=False)
+        self.resources = ExitStack()
         self.container = None
-        self.file = None
-        self.path = None
+        self.stream = None
         self.started = None
-        self.pending_audio = []
-        self.pending_bytes = 0
-        self.audio_end = 0
         self.video_pts = -1
-
-    def elapsed(self):
-        now = time.monotonic()
-        if self.started is None:
-            self.started = now
-        return now - self.started
-
-    def open(self, size=None):
-        import av
-
-        self.directory.mkdir(parents=True, exist_ok=True)
-        name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        self.path = self.directory / f"{name}-{uuid4().hex[:8]}.mkv"
-        self.file = self.path.open("xb")
         try:
-            self.container = av.open(self.file, mode="w", format="matroska")
-            self.audio_stream = self.container.add_stream("pcm_s16le", rate=AUDIO_RATE)
-            self.audio_stream.layout = "mono"
-            if size:
-                self.video_stream = self.container.add_stream("mjpeg", rate=30)
-                self.video_stream.width, self.video_stream.height = size
-                self.video_stream.pix_fmt = "yuvj420p"
-            for samples, elapsed in self.pending_audio:
-                self.write_audio(samples, elapsed)
-            self.pending_audio.clear()
-            self.pending_bytes = 0
-            logging.info("Recording to %s", self.path)
+            self.wav = self.resources.enter_context(wave.open(str(self.path / "audio.wav"), "wb"))
+            self.wav.setnchannels(1)
+            self.wav.setsampwidth(2)
+            self.wav.setframerate(AUDIO_RATE)
+            self.text = self.resources.enter_context((self.path / "transcript.txt").open("x", encoding="utf-8"))
         except Exception:
-            self.close()
+            self.resources.close()
             raise
+        logging.info("Recording to %s", self.path)
 
     def audio(self, samples):
-        elapsed = self.elapsed()
-        if self.container is None:
-            # At most ~30 s before video arrives. Do not silently lose recordings.
-            if self.pending_bytes + len(samples) > AUDIO_RATE * 2 * 30:
-                raise OSError("Recording received 30 seconds of audio without video")
-            self.pending_audio.append((samples, elapsed))
-            self.pending_bytes += len(samples)
-        else:
-            self.write_audio(samples, elapsed)
+        self.wav.writeframes(samples)
 
-    def write_audio(self, samples, elapsed):
+    def transcript(self, event):
+        if event.get("final") and event.get("text") and not event.get("error"):
+            self.text.write(event["text"].strip() + "\n")
+            self.text.flush()
+
+    def video(self, image):
         import av
 
-        packet = av.Packet(samples)
-        packet.stream = self.audio_stream
-        packet.time_base = Fraction(1, AUDIO_RATE)
-        packet.pts = packet.dts = max(self.audio_end, round(elapsed * AUDIO_RATE) - len(samples) // 2)
-        packet.duration = len(samples) // 2
-        self.audio_end = packet.pts + packet.duration
-        self.container.mux(packet)
-
-    def video(self, jpeg, size):
-        import av
-
-        elapsed = self.elapsed()
+        now = time.monotonic()
         if self.container is None:
-            self.open(size)
-        packet = av.Packet(jpeg)
-        packet.stream = self.video_stream
-        packet.time_base = Fraction(1, 1000000)
-        self.video_pts = max(self.video_pts + 1, round(elapsed * 1000000))
-        packet.pts = packet.dts = self.video_pts
-        self.container.mux(packet)
+            self.started = now
+            self.container = av.open(str(self.path / "video.mp4"), mode="w", format="mp4")
+            self.stream = self.container.add_stream("libx264", rate=30)
+            # H.264 yuv420p needs even dimensions; usual 640x480 stays unchanged.
+            self.stream.width = image.width + image.width % 2
+            self.stream.height = image.height + image.height % 2
+            self.stream.pix_fmt = "yuv420p"
+            self.stream.codec_context.time_base = Fraction(1, 1000)
+            self.stream.options = {"preset": "ultrafast", "tune": "zerolatency", "crf": "23"}
+        frame = av.VideoFrame.from_image(image).reformat(
+            width=self.stream.width, height=self.stream.height, format="yuv420p")
+        self.video_pts = max(self.video_pts + 1, round((now - self.started) * 1000))
+        frame.pts = self.video_pts
+        frame.time_base = Fraction(1, 1000)
+        for packet in self.stream.encode(frame):
+            self.container.mux(packet)
 
     def close(self):
-        if self.container is None and self.pending_audio and self.file is None:
-            self.open()  # Preserve an audio-only connection too.
         try:
             if self.container is not None:
-                self.container.close()
+                try:
+                    if self.stream is not None:
+                        for packet in self.stream.encode():
+                            self.container.mux(packet)
+                finally:
+                    self.container.close()
+                    self.container = None
         finally:
-            if self.file is not None:
-                self.file.close()
-        self.container = None
+            self.resources.close()

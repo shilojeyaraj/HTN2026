@@ -84,7 +84,7 @@ def handle_connection(conn, infer, show_frame=lambda image: None, receive_audio=
                     logging.exception("Frame decoding failed")
                     rgb = None
                 if recording is not None and rgb is not None:
-                    recording.video(jpeg, rgb.size)
+                    recording.video(rgb)
                 with condition:
                     pending.append((frame_id, received_at, rgb))
                     condition.notify()
@@ -152,7 +152,7 @@ def main():
     parser.add_argument("--stt-cache", type=Path, default=Path(__file__).resolve().parent.parent / ".cache" / "whisper")
     parser.add_argument("--speech-threshold", type=float, default=0.015, help="speech RMS threshold, 0–1")
     parser.add_argument("--partial-interval", type=float, default=0.8, help="seconds of audio between provisional updates")
-    parser.add_argument("--record", action="store_true", help="save received video and audio as Matroska on the laptop")
+    parser.add_argument("--record", action="store_true", help="save silent MP4, WAV, and final transcript in a timestamped folder")
     parser.add_argument("--record-dir", type=Path, default=Path(__file__).resolve().parent.parent / "recordings")
     args = parser.parse_args()
     if not np.isfinite(args.timeout) or args.timeout <= 0:
@@ -176,10 +176,13 @@ def serve(args, show_frame=lambda image: None, show_text=lambda text: None, shut
     shutdown = shutdown or threading.Event()
     transcribe = None if args.no_transcription else load_transcriber(args.stt_model, args.stt_cache)
     infer = None if args.no_depth else load_model(args.device)
+    recording = None
 
     def transcript(event):
         print(json.dumps(event, ensure_ascii=False), flush=True)
         show_text(event)
+        if recording is not None:
+            recording.transcript(event)
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -196,14 +199,15 @@ def serve(args, show_frame=lambda image: None, show_text=lambda text: None, shut
                 conn.settimeout(args.timeout)
                 logging.info("Pi connected: %s", address)
                 try:
-                    with audio_transcription(transcribe, transcript, args.speech_threshold,
-                                             args.partial_interval) as receive_audio:
-                        recording = Recording(args.record_dir) if args.record else None
-                        try:
+                    recording = Recording(args.record_dir) if args.record else None
+                    try:
+                        with audio_transcription(transcribe, transcript, args.speech_threshold,
+                                                 args.partial_interval) as receive_audio:
                             handle_connection(conn, infer, show_frame, receive_audio, recording, shutdown)
-                        finally:
-                            if recording is not None:
-                                recording.close()
+                    finally:
+                        if recording is not None:
+                            recording.close()
+                        recording = None
                 except (EOFError, OSError, ValueError) as exc:
                     logging.info("Client disconnected: %s", exc)
                     show_frame(None)

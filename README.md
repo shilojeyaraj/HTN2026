@@ -239,28 +239,36 @@ venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record
 venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record --record-dir /path/to/recordings
 ```
 
-Each Pi connection creates a unique UTC-timestamped `.mkv` file in the project
-`recordings/` directory (ignored by Git). Reconnecting creates a new file.
-The recording contains received webcam video and microphone audio, including
-video frames skipped by depth inference. It uses PyAV (already installed with
-faster-whisper, now declared explicitly) to copy MJPEG and PCM without
-re-encoding. No additional system FFmpeg installation is required on the laptop.
-Use an MKV-capable player such as VLC to review it. Transcript text is not
-embedded in the file.
+Each Pi connection creates a UTC-timestamped session folder (ignored by Git):
 
-Recording is independent of `--no-depth`, `--no-preview`, and
-`--no-transcription`. Pi `--no-audio` means there is no microphone audio to save.
-Media timestamps reflect laptop receipt time; camera capture timestamps are
-not transmitted, so exact A/V synchronization and reconstruction of frames
-lost before receipt are not guaranteed. Disk writes add I/O to reception;
-use a fast local disk with enough free space. Recording errors close the
-connection and are logged rather than silently dropping media.
+```text
+recordings/20260919T143022.123456Z/
+  video.mp4
+  audio.wav
+  transcript.txt
+```
+
+`video.mp4` is silent H.264 video, including frames skipped by depth inference.
+`audio.wav` contains the received mono, 16-bit, 16 kHz microphone audio.
+`transcript.txt` contains one finalized utterance per line; provisional revisions
+are not saved. Disconnecting flushes the last utterance before closing the files.
+Reconnecting creates a new folder. No Pi code sync is needed.
+
+Recording uses PyAV; no additional system FFmpeg installation is required on
+the laptop. H.264 encoding and disk writes add work to reception, so use a fast
+local disk with enough free space. MP4 is created when the first valid video
+frame arrives. With no microphone audio, the WAV is empty; with
+`--no-transcription`, the transcript is empty. Recording also works with
+`--no-depth` and `--no-preview`.
+
+Video timing reflects laptop receipt time; WAV samples are stored consecutively.
+Exact A/V synchronization and reconstruction of data lost before receipt are
+not guaranteed. Recording errors close the connection and are logged.
 
 Stop the Pi client, close the preview window, or use Ctrl+C on the server to
-finalize the file. Closing the preview now requests receiver shutdown and waits
-for recording finalization (and pending transcription). Force-killing the
-process or losing power can leave an unfinished file. Existing recordings are
-never overwritten or automatically deleted. No Pi code sync is needed.
+finalize the files and pending transcription. Force-killing the process or
+losing power can leave unfinished files. Existing recordings are never
+overwritten or automatically deleted.
 
 ### Depth results
 

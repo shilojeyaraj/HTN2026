@@ -7,10 +7,12 @@ import socket
 import tempfile
 import threading
 import unittest
+import wave
 
 import av
 from PIL import Image
 
+from laptop.audio import audio_transcription
 from laptop.recording import Recording
 from laptop.server import handle_connection
 from shared.protocol import AUDIO_PREFIX, MAX_FRAME, MAX_RESULT, receive, send
@@ -29,7 +31,9 @@ class RecordingTest(unittest.TestCase):
             def serve():
                 with server:
                     try:
-                        handle_connection(server, None, recording=recorder, shutdown=shutdown)
+                        with audio_transcription(lambda pcm: "Final words.", recorder.transcript) as audio:
+                            handle_connection(server, None, receive_audio=audio,
+                                              recording=recorder, shutdown=shutdown)
                     except EOFError:
                         pass
                     except Exception as exc:
@@ -41,8 +45,9 @@ class RecordingTest(unittest.TestCase):
             worker.start()
             try:
                 with client:
-                    pcm = b"\x00\x01" * 320
-                    send(client, AUDIO_PREFIX + pcm, MAX_FRAME)  # Audio before first video.
+                    pcm = b"\x00\x20" * 320
+                    for _ in range(15):
+                        send(client, AUDIO_PREFIX + pcm, MAX_FRAME)  # Audio before first video.
                     jpeg = io.BytesIO()
                     Image.new("RGB", (64, 48), "red").save(jpeg, format="JPEG")
                     for _ in range(2):
@@ -56,23 +61,29 @@ class RecordingTest(unittest.TestCase):
                 worker.join(3)
             self.assertFalse(worker.is_alive())
             self.assertFalse(errors)
-            with av.open(recorder.path) as container:
-                self.assertEqual([s.type for s in container.streams], ["audio", "video"])
-                frames = list(container.decode())
-            self.assertEqual(sum(isinstance(f, av.VideoFrame) for f in frames), 2)
-            audio = [f for f in frames if isinstance(f, av.AudioFrame)]
-            self.assertEqual(sum(f.samples for f in audio), 320)
-            self.assertEqual(audio[0].to_ndarray().tobytes(), pcm)
+            with av.open(recorder.path / "video.mp4") as container:
+                self.assertEqual([s.type for s in container.streams], ["video"])
+                self.assertEqual(container.streams.video[0].codec_context.name, "h264")
+                self.assertEqual(len(list(container.decode(video=0))), 2)
+            with wave.open(str(recorder.path / "audio.wav")) as audio:
+                self.assertEqual(audio.getframerate(), 16000)
+                self.assertEqual(audio.getnchannels(), 1)
+                self.assertEqual(audio.getsampwidth(), 2)
+                self.assertEqual(audio.readframes(4800), pcm * 15)
+            self.assertEqual((recorder.path / "transcript.txt").read_text(), "Final words.\n")
 
     def test_audio_only_and_unique_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             for _ in range(2):
                 recorder = Recording(directory)
                 recorder.audio(bytes(640))
+                recorder.transcript({"text": "provisional", "final": False})
+                recorder.transcript({"text": "Hello there.", "final": True})
                 recorder.close()
-                with av.open(recorder.path) as container:
-                    self.assertEqual(sum(frame.samples for frame in container.decode(audio=0)), 320)
-            self.assertEqual(len(list(Path(directory).glob("*.mkv"))), 2)
+                with wave.open(str(recorder.path / "audio.wav")) as audio:
+                    self.assertEqual(audio.getnframes(), 320)
+                self.assertEqual((recorder.path / "transcript.txt").read_text(), "Hello there.\n")
+            self.assertEqual(len(list(Path(directory).iterdir())), 2)
 
 
 if __name__ == "__main__":
