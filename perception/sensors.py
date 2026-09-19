@@ -38,14 +38,20 @@ def read_audio() -> dict:
 
 
 def read_gyro() -> dict:
-    """Returns {pitch_deg, roll_deg, accel_z_g, tipped: bool, bump: bool}."""
+    """Returns {pitch_deg, roll_deg, yaw_rate_dps, accel_z_g, tipped, bump}.
+
+    yaw_rate_dps is gyro_z angular rate — used by the pose estimator for dead-reckoning
+    heading. The MPU6050 has no magnetometer, so yaw drifts ~0.25 deg/min.
+    """
     # TODO: replace with real MPU6050/OAK-D IMU reading
     pitch = random.uniform(-0.5, 0.5)
     roll = random.uniform(-0.5, 0.5)
+    yaw_rate = random.uniform(-0.1, 0.1)  # near-zero when stationary
     accel_z = 1.0 + random.uniform(-0.01, 0.01)
     return {
         "pitch_deg": round(pitch, 1),
         "roll_deg": round(roll, 1),
+        "yaw_rate_dps": round(yaw_rate, 2),
         "accel_z_g": round(accel_z, 2),
         "tipped": abs(pitch) > 45.0,
         "bump": False,

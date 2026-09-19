@@ -30,3 +30,47 @@ export interface Rover {
 }
 
 export type Tab = 'dashboard' | 'encounters'
+
+// --- Map types ---
+
+export interface SoundSource {
+  x: number
+  y: number
+  kind: 'distress' | 'sound' | 'voice' | 'speech'
+  label: string
+  db?: number
+  final?: boolean
+}
+
+export interface HeatPoint {
+  x: number
+  y: number
+  celsius: number
+  status: 'ok' | 'warm' | 'overheat'
+}
+
+export interface Hazard {
+  x: number
+  y: number
+  type: 'bump' | 'tipped'
+}
+
+export interface Annotation {
+  x: number
+  y: number
+  text: string
+  source: string
+}
+
+export interface MapPayload {
+  rover_pose: [number, number, number]
+  grid: number[]
+  grid_width: number
+  grid_height: number
+  grid_resolution_m: number
+  sound_sources: SoundSource[]
+  heat_points: HeatPoint[]
+  hazards: Hazard[]
+  annotations: Annotation[]
+  trail: number[][]
+}

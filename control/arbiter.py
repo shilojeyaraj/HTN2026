@@ -34,6 +34,16 @@ class Arbiter:
             linear, angular = (0.0, 0.0)  # both stale: halt
         self.publish_cmd_vel(linear, angular)
 
+    @property
+    def current_linear_velocity(self) -> float:
+        """Current forward velocity for the pose estimator."""
+        now = time.monotonic()
+        if self._reflex_cmd is not None and now - self._reflex_cmd_at < WATCHDOG_TIMEOUT_S:
+            return self._reflex_cmd[0]
+        if now - self._brain_cmd_at < WATCHDOG_TIMEOUT_S:
+            return self._brain_cmd[0]
+        return 0.0
+
     def run_forever(self) -> None:
         period = 1.0 / PUBLISH_HZ
         while True:

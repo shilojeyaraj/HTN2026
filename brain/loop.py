@@ -8,6 +8,9 @@ A Baseten-deployed fine-tuned command parser (brain/command_parser.py) sits betw
 and the brain: simple voice commands ("forward 2 meters", "turn left", "stop") are parsed
 and executed directly without a cloud round-trip to Backboard. Complex or unrecognized
 commands fall through to the Backboard brain for full reasoning.
+
+After each episode, sensor readings are fed into the occupancy map (control/mapper.py)
+so the frontend can render a live area map.
 """
 
 import logging
@@ -62,8 +65,49 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter) -> dict:
     return execute_verb(name, args, arbiter, get_latest_detections)
 
 
-def run_episode(state: RobotState, arbiter) -> RobotState:
+def _update_map(state: RobotState, mapper, pose_estimator, transcript_buffer=None) -> None:
+    """Feed the latest sensor readings into the occupancy map after each episode."""
+    if mapper is None or pose_estimator is None:
+        return
+    pose = pose_estimator.pose
+    mapper.add_trail(pose)
+
+    for det in state.detections:
+        if det["label"] == "obstacle":
+            proximity = max(0.0, 1.0 - det["distance_m"])
+            mapper.add_depth(pose, det["bearing_deg"], proximity)
+
+    if transcript_buffer is not None:
+        for event in transcript_buffer.recent(3):
+            mapper.add_transcript(pose, event.text, event.final)
+
+    audio = sensors.read_audio()
+    if audio.get("event"):
+        ev = audio["event"]
+        mapper.add_sound(pose, ev["kind"], ev.get("label", ev["kind"]), audio["db"])
+
+    temp = sensors.read_temperature()
+    mapper.add_heat(pose, temp["celsius"], temp["status"])
+
+    gyro = sensors.read_gyro()
+    if gyro.get("tipped"):
+        mapper.add_hazard(pose, "tipped")
+    if gyro.get("bump"):
+        mapper.add_hazard(pose, "bump")
+
+    if state.scene_description:
+        mapper.add_annotation(pose, state.scene_description, "gemini")
+
+
+def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
+                transcript_buffer=None) -> RobotState:
     state = _perceive(state)
+
+    if transcript_buffer is not None and not state.last_user_command:
+        text = transcript_buffer.consume_final()
+        if text:
+            state.last_user_command = text
+            logger.info("transcript -> last_user_command: %s", text)
 
     # Fast path: try the Baseten fine-tuned parser for simple voice commands.
     # Falls through to the Backboard brain for complex/unrecognized commands.
@@ -73,6 +117,7 @@ def run_episode(state: RobotState, arbiter) -> RobotState:
             result = _execute_verb(parsed["verb"], parsed["args"], state, arbiter)
             logger.info("parser fast-path: %s -> %s -> %s", state.last_user_command, parsed, result)
             state.last_user_command = None
+            _update_map(state, mapper, pose_estimator, transcript_buffer)
             return state
 
     def execute_tool(name: str, args: dict) -> dict:
@@ -94,4 +139,5 @@ def run_episode(state: RobotState, arbiter) -> RobotState:
         memory="Auto",
     )
 
+    _update_map(state, mapper, pose_estimator, transcript_buffer)
     return state

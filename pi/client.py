@@ -64,7 +64,7 @@ def mjpeg_frames(chunks):
         raise EOFError("truncated MJPEG stream")
 
 
-def stream(sock, args):
+def stream(sock, args, on_transcript=None):
     pending = deque(maxlen=1)
     audio_pending = deque(maxlen=10)  # At most 200 ms; drop oldest audio on a slow link.
     condition = threading.Condition()
@@ -167,6 +167,9 @@ def stream(sock, args):
             result = json.loads(receive(sock, MAX_RESULT))
             if not isinstance(result, dict) or result.get("status") not in {"ok", "uncertain", "error", "preview"}:
                 raise ValueError("invalid server result")
+            if on_transcript and result.get("transcripts"):
+                for t in result["transcripts"]:
+                    on_transcript(t["text"], t.get("utterance_id", 0))
             print(json.dumps(result), flush=True)
             if args.once:
                 return

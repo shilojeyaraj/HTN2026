@@ -10,9 +10,10 @@ from unittest.mock import patch, MagicMock
 from brain import command_parser
 
 
-def _mock_response(data: dict):
+def _mock_chat_response(content: str):
+    """Mock an OpenAI-compatible /v1/chat/completions response."""
     mock = MagicMock()
-    mock.json.return_value = data
+    mock.json.return_value = {"choices": [{"message": {"content": content}}]}
     mock.raise_for_status.return_value = None
     return mock
 
@@ -34,27 +35,27 @@ class TestParseJsonExtraction:
     def test_parses_clean_json_output(self):
         expected = {"verb": "forward", "args": {"distance_m": 2.0}}
         with patch.dict("os.environ", _ENV, clear=False), patch("requests.post") as mock_post:
-            mock_post.return_value = _mock_response({"output": json.dumps(expected)})
+            mock_post.return_value = _mock_chat_response(json.dumps(expected))
             result = command_parser.parse("forward 2 meters")
             assert result == expected
 
     def test_parses_json_embedded_in_text(self):
         expected = {"verb": "turn", "args": {"degrees": -90}}
         with patch.dict("os.environ", _ENV, clear=False), patch("requests.post") as mock_post:
-            mock_post.return_value = _mock_response({"text": f"Sure! {json.dumps(expected)} done."})
+            mock_post.return_value = _mock_chat_response(f"Sure! {json.dumps(expected)} done.")
             result = command_parser.parse("turn right 90 degrees")
             assert result == expected
 
     def test_parses_json_from_output_field(self):
         expected = {"verb": "stop", "args": {}}
         with patch.dict("os.environ", _ENV, clear=False), patch("requests.post") as mock_post:
-            mock_post.return_value = _mock_response({"output": json.dumps(expected)})
+            mock_post.return_value = _mock_chat_response(json.dumps(expected))
             result = command_parser.parse("stop")
             assert result == expected
 
     def test_returns_none_on_invalid_json(self):
         with patch.dict("os.environ", _ENV, clear=False), patch("requests.post") as mock_post:
-            mock_post.return_value = _mock_response({"output": "not json at all"})
+            mock_post.return_value = _mock_chat_response("not json at all")
             result = command_parser.parse("do something weird")
             assert result is None
 
@@ -67,6 +68,6 @@ class TestParseJsonExtraction:
 
     def test_returns_none_on_no_json_found(self):
         with patch.dict("os.environ", _ENV, clear=False), patch("requests.post") as mock_post:
-            mock_post.return_value = _mock_response({"output": "no braces here"})
+            mock_post.return_value = _mock_chat_response("no braces here")
             result = command_parser.parse("hello world")
             assert result is None
