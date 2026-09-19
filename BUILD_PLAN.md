@@ -20,12 +20,15 @@ until chassis/compute is confirmed. Sections 1-3 below (role map, sponsor tracks
 still accurate; treat the file-level details in the delta table and phase descriptions
 below as describing the pre-rewrite shape unless a section says otherwise.
 
-**Open conflict, not yet resolved:** the rewritten CLAUDE.md (section 4) says Baseten's
-role is voice-in (STT), direct, with an optional command-parser fine-tune as a later side
-quest. That's a reversal of the explicit decision made earlier in this build (Baseten =
-a fine-tuned vision model as its *main* slice, voice-in moved to Backboard's own STT) —
-which is what's actually implemented in `perception/finetuned_vision.py` and
-`voice/stt.py` right now. Flagged to the user; not resolved unilaterally.
+**Resolved 2026-09-19:** the earlier "Baseten = fine-tuned vision model, voice-in via
+Backboard" plan (still described in section 1's table and its "Revised" note below) has
+been reverted, per CLAUDE.md section 4: **Baseten = direct STT** (Whisper Large V3 Turbo,
+its own dedicated predict endpoint) is the track-qualifying slice again; the fine-tune is
+now an optional, deferred command-parser side quest (CLAUDE.md section 13), not
+implemented. `perception/finetuned_vision.py` has been removed; `voice/stt.py` now calls
+Baseten directly. Section 1's role-map table and the "Revised" paragraph after it are
+stale as a result — treat this note as the current truth for Baseten/voice-in until
+someone rewrites that table.
 
 ---
 

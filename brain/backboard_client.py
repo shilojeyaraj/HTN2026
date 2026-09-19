@@ -58,31 +58,9 @@ class BackboardBrain:
     def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
         return asyncio.run(self._run_tools(content, system_prompt, tools, execute_tool, memory))
 
-    async def _transcribe(self, audio_path: str) -> str:
-        # Deliberately overrides self.llm_provider/model_name: transcription needs an
-        # STT-capable leg, not the planner's model, regardless of what this instance is
-        # otherwise configured with.
-        # VERIFY: `send_to_llm="false"` is meant to return the raw transcript without also
-        # spending an LLM turn on it — confirm against the installed SDK; if unsupported,
-        # drop it and just take the transcript from whatever `response.content` holds.
-        response = await self.client.send_message(
-            audio_file=audio_path,
-            voice={"stt": {"provider": "openai", "model": "gpt-4o-mini-transcribe"}},
-            llm_provider="openai",
-            model_name="gpt-4o-mini",
-            thread_id=self.thread_id,
-            assistant_id=self.assistant_id,
-            send_to_llm="false",
-        )
-        self.thread_id = response.thread_id
-        self.assistant_id = response.assistant_id
-        return response.content
 
-    def transcribe(self, audio_path: str) -> str:
-        return asyncio.run(self._transcribe(audio_path))
-
-
-# Shared across the deliberative loop (brain/loop.py) and voice-in (voice/stt.py) so both
-# ride the same mission thread — that's what makes `memory="Auto"` and shared history useful.
+# Shared across the deliberative loop (brain/loop.py) so repeated episodes ride the same
+# mission thread — that's what makes `memory="Auto"` and shared history useful. Voice-in
+# is direct Baseten STT (voice/stt.py), not routed through here (CLAUDE.md section 4).
 # VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
 brain = BackboardBrain(llm_provider="google", model_name="gemini-2.5-pro")

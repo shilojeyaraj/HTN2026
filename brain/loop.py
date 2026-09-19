@@ -13,7 +13,6 @@ from brain.state import RobotState
 from brain.tools import SYSTEM_PROMPT, VERBS
 from control.controller import execute_verb
 from perception.camera import get_latest_detections, get_latest_frame
-from perception.finetuned_vision import classify_frame
 from perception.vision import describe_scene
 from voice.tts import speak
 
@@ -27,12 +26,6 @@ def _perceive(state: RobotState) -> RobotState:
         state.scene_description = describe_scene(frame_jpeg, detections)
     except Exception:
         logger.warning("vision failed, keeping prior scene_description", exc_info=True)
-
-    try:
-        frame_jpeg, _ = get_latest_frame()
-        state.venue_model_output = classify_frame(frame_jpeg)
-    except Exception:
-        logger.warning("finetuned vision failed, no Baseten output this episode", exc_info=True)
 
     return state
 
@@ -59,7 +52,6 @@ def run_episode(state: RobotState, arbiter) -> RobotState:
 
     user_content = (
         f"Scene: {state.scene_description}\n"
-        f"Venue model output: {state.venue_model_output}\n"
         f"Current goal: {state.current_goal}\n"
         f"User command: {state.last_user_command}\n"
         f"Pose: {state.robot_pose}"

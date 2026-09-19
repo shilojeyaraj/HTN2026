@@ -16,7 +16,6 @@ class RobotState:
     velocity: tuple[float, float] = (0.0, 0.0)  # linear, angular
     detections: list[Detection] = field(default_factory=list)
     scene_description: str | None = None
-    venue_model_output: dict | None = None  # Baseten model fine-tuned on rover-captured footage
     current_goal: tuple[float, float] | None = None
     last_user_command: str | None = None
     safety_status: Literal["OK", "VETO"] = "OK"

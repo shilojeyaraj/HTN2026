@@ -13,7 +13,7 @@ The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **di
 ### Backboard.io: Built on Backboard
 - **Prize:** guaranteed internship interviews, $400 per team, swag. 1 winner.
 - **Scope:** build anything, the only rule is it runs on Backboard. Text, image, voice, 17,000+ models, memory, RAG, embeddings, tool calling, web search, one API. Judged on ambition; the more of the stack you use, the better the odds.
-- **Our role for it:** the brain core. Agent loop, tool calling, thread state, planner model routing, voice-in (STT, revised — see the Baseten entry below), and (recommended) memory. This is where the "whole stack in one key" story lives.
+- **Our role for it:** the brain core. Agent loop, tool calling, thread state, planner model routing, and (recommended) memory. This is where the "whole stack in one key" story lives.
 
 ### Rox: Best AI Agent
 - **Prize:** $10K first, $2K second. 2 winners. (Biggest cash on the board.)
@@ -33,11 +33,9 @@ The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **di
 ### Baseten: Best Use of Baseten
 - **Prize (per member):** Grand: SF trip + final-round interviews + $200 credits + signed *Inference Engineering*. Runner-up: AirPods 4 + $100 credits + book. 2 winners.
 - **Scope:** creative, meaningful use of Baseten (inference or training).
-- **Our role for it (revised):** train, not just infer. Capture real-world video/frames from the rover's own camera at the event, fine-tune a small vision model on Baseten's H100 workstations (visit the booth to enable), and deploy it on Baseten for inference back on the robot. This is a stronger, more literal claim on the track's "inference or training" scope than hosting a stock model, and it ties Baseten directly to the robot's own embodiment story instead of a generic STT call.
-  - **What it's for:** a distinct slice from Gemini's general scene description — a specialized classifier/detector tuned to *this specific venue/objects*, feeding an extra signal into the planner alongside the Gemini scene description. Exact task (object classes, detection vs. classification) depends on what footage is practical to capture and label in the time available; decide once you see how much time is left for data collection.
-  - **Voice-in moves off Baseten as a result** — see the Backboard entry below.
+- **Our role for it:** voice in, a speech-to-text model (Whisper Large V3 Turbo) hosted on Baseten, called **directly**, so it does not collide with ElevenLabs. Optional bigger swing, deferred: fine-tune a small command-parser model on their H100 workstations (visit the booth to enable) once the core robot works — a side quest, not the track-qualifying deliverable.
 
-**Cost of this division:** routing vision-for-planning to Gemini and voice-out to ElevenLabs directly means those pieces bypass Backboard, so we use slightly less of Backboard's stack. Voice-in now goes through Backboard's own STT instead, which claws some of that back. Backboard still owns orchestration, planner routing, tools, memory, and now voice-in.
+**Cost of this division:** routing vision to Gemini, voice-out to ElevenLabs, and voice-in to Baseten directly means those three pieces bypass Backboard, so we use slightly less of Backboard's stack. That is the deliberate trade to make the other tracks real. Backboard still owns orchestration, planner routing, tools, and memory.
 
 ---
 
