@@ -21,10 +21,11 @@ def run_preview(serve):
     pending = deque(maxlen=1)  # Display only the newest frame, never build a backlog.
     frames = 0
     measured_at = time.monotonic()
+    shutdown = threading.Event()
 
     def worker():
         try:
-            serve(pending.append, transcripts.append)
+            serve(pending.append, transcripts.append, shutdown)
         except Exception as exc:
             logging.exception("Camera server stopped")
             pending.append(f"Server stopped: {exc}")
@@ -61,10 +62,14 @@ def run_preview(serve):
             root.deiconify()
         root.after(30, update)
 
-    threading.Thread(target=worker, daemon=True).start()
+    server_worker = threading.Thread(target=worker, daemon=True)
+    server_worker.start()
     root.after(30, update)
     root.bind("<Escape>", lambda event: root.destroy())
     try:
         root.mainloop()
     except KeyboardInterrupt:
         root.destroy()
+    finally:
+        shutdown.set()
+        server_worker.join()  # Finalize recordings before exiting the process.

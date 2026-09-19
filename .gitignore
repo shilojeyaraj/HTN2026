@@ -3,6 +3,7 @@
 venv/
 /test/*.jpg
 /.cache/
+/recordings/
 __pycache__/
 *.pyc
 .DS_Store
