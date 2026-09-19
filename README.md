@@ -12,6 +12,11 @@ Nothing is recorded to disk. Run commands from the repository root.
 
 ### 1. Laptop
 
+`faster-whisper>=1.1,<2` is declared in `laptop/requirements.txt`. The root
+`requirements.txt` includes that file, so either install path gets transcription.
+For just webcam streaming/transcription, prefer the laptop requirements: the
+root file additionally installs dependencies for the older robot/voice stack.
+
 The laptop needs the Python dependencies below; ffplay is no longer used.
 The Pi still needs FFmpeg for webcam/microphone capture. Python setup:
 
@@ -41,6 +46,68 @@ support (`python3-tk` on Debian/Ubuntu, or Tk support in a custom Python build).
 Both devices must be on the same network. Allow inbound TCP port 8765 if
 needed. This prototype is unauthenticated; use a trusted private network.
 Without `--host`, the server binds only to localhost.
+
+### System dependencies on another Unix machine
+
+The **receiver** is tested on Linux with Python 3.13. Use a 64-bit Python with
+available PyTorch, CTranslate2, ONNX Runtime, and PyAV wheels. Linux/macOS have
+[CTranslate2 binary packages](https://opennmt.net/CTranslate2/installation.html);
+this does not guarantee every Unix/CPU combination. macOS has not been tested
+in this project. BSD and unsupported/old Linux distributions may require
+native builds and are not an out-of-the-box target.
+
+**Debian/Ubuntu laptop**, before creating the virtual environment:
+
+```sh
+sudo apt update
+sudo apt install python3 python3-venv python3-pip python3-tk libgomp1 git rsync openssh-client
+```
+
+**macOS laptop**, using matching Homebrew Python/Tk versions:
+
+```sh
+brew install python@3.13 python-tk@3.13 git rsync
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r laptop/requirements.txt
+```
+
+[Homebrew's Tk package](https://formulae.brew.sh/formula/python-tk%403.13)
+must match the Python used to create the venv. For pyenv/custom builds, install
+Tcl/Tk development libraries before building Python; installing pip packages
+cannot repair a Python built without `_tkinter`. Verify in the activated venv:
+
+```sh
+python -m tkinter
+python -c "import faster_whisper, torch, torchvision; from PIL import ImageTk; print('Imports OK')"
+```
+
+The first command should open a test window. Preview requires a graphical
+desktop session (and a working display connection on Linux). On headless SSH
+sessions use `--no-preview`; transcripts still print to the terminal.
+
+**Pi/capture host:** the current capture implementation is Linux-only because
+it uses V4L2 and ALSA. It requires system `ffmpeg`, with those input backends,
+and camera/microphone device permissions. `v4l-utils` and `alsa-utils` provide
+the discovery commands below. Check backends with `ffmpeg -hide_banner -devices`.
+On Raspberry Pi OS, if opening the device reports permission denied, check
+membership of the `video`/`audio` groups and log in again after adding access.
+Capturing directly on macOS would need an AVFoundation capture implementation;
+installing FFmpeg alone does not make this Pi client portable to macOS.
+
+**Not required for normal laptop transcription:** system FFmpeg/ffplay,
+PortAudio, CUDA, or a cloud API key. Faster-whisper's pip dependencies provide
+the audio decoding/inference libraries. The synthetic integration test does
+require system `ffmpeg` (`sudo apt install ffmpeg` or `brew install ffmpeg`).
+The older `voice/stt.py` path uses `sounddevice` and separately needs PortAudio
+on Linux (`sudo apt install libportaudio2`); it is not used by this receiver.
+
+First startup needs internet access to download model weights and writable
+cache space. Speech weights default to `.cache/whisper/`; optional depth uses
+the Hugging Face cache. On a new machine, use a persistent writable cache such
+as `HF_HOME="$HOME/.cache/huggingface"` rather than this laptop's `/tmp` cache.
+Both machines need network reachability on TCP 8765. SSH/rsync are needed only
+for the documented sync workflow, not for streaming itself.
 
 ### 2. Sync from the laptop
 
