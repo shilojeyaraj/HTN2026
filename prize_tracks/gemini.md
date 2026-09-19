@@ -2,6 +2,8 @@
 
 **Prize:** Google Swag Kits. 1 winner.
 **Scope:** push the boundaries of what is possible with the Gemini API.
+**Gemini Project Number:** 305405938625
+**Project name:** projects/305405938625
 
 ---
 
@@ -65,9 +67,9 @@ The detections from the depth pipeline are passed alongside the image so Gemini 
 | `control/mapper.py` | `add_annotation()` geolocates Gemini descriptions onto the occupancy grid |
 | `control/map_server.py` | Streams annotations to frontend via WebSocket at 5 Hz |
 | `frontend/src/components/MapView.tsx` | Renders Gemini annotations as text overlays on the map |
-| Backboard dashboard | Where the Gemini API key is connected (BYOK) — not in `.env` |
+| Backboard dashboard | Where the Gemini API key is connected (BYOK) — also in `.env` as `GEMINI_API_KEY` |
 
-> Note: `GEMINI_API_KEY` is intentionally **not** in `.env` — it's connected in the Backboard dashboard's provider settings, not passed as a direct SDK key. See `.env.example:22`.
+> Note: `GEMINI_API_KEY` is in `.env` AND connected as BYOK in the Backboard dashboard. The key is used by Backboard to call Gemini on our behalf.
 
 ---
 

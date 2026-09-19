@@ -163,7 +163,7 @@ Check that `demo_map.py` or `main.py` is running and the MapServer is on port 87
 
 ## Devpost Submission Checklist
 
-- [ ] Gemini Project Number from Google AI Studio
-- [ ] Select all 6 prize tracks on Devpost
+- [ ] Gemini Project Number: 305405938625
+- [ ] Select all 6 prize tracks on Devpost (Backboard, Baseten, Gemini, ElevenLabs, Rox, Huawei)
 - [ ] Team name and member info
 - [ ] Submit by 2:00 PM EDT Saturday
