@@ -121,7 +121,7 @@ python control/demo_map.py
 
 **You say:** "They coordinate through shared state, a transcript buffer, a priority arbiter, and a live spatial map. The safety agent can veto the Leader at any time. The reflex loop overrides everything if something goes wrong. It's distributed across the Pi, the laptop, and the cloud — genuine multi-agent collaboration, not chained prompts."
 
-**Prize callout:** [Huawei — 1 Leader + 8 Teammates, distributed, task decomposition, coordination] [Backboard — orchestration harness, 17 tools, 10 features]
+**Prize callout:** [Huawei — 1 Leader + 8 Teammates, distributed, task decomposition, coordination] [Backboard — orchestration harness, 16 tools, 10 features]
 
 ### 4:30 — Close
 
@@ -133,7 +133,7 @@ python control/demo_map.py
 
 | Prize | Key features to mention | When in demo |
 |---|---|---|
-| **Backboard** | 17 tools, RAG knowledge base, structured memory, encounter history, memory insights, teammate tools, Inner Monologue, BYOK model routing | Throughout — it's the harness |
+| **Backboard** | 16 tools, RAG knowledge base, structured memory, encounter history, memory insights, teammate tools, Inner Monologue, BYOK model routing | Throughout — it's the harness |
 | **Baseten** | Fine-tuned Qwen3 command parser (checkpoint-105), local STT fallback | 0:15 — voice command parsing |
 | **Gemini** | Flash for vision, Pro for planning, BYOK in Backboard, scene annotations on map | 0:45 — scene understanding |
 | **ElevenLabs** | Voice output to victims, async non-blocking, ~75ms latency | 1:45 and 2:45 — speaking to survivor |
