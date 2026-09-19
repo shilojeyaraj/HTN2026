@@ -64,7 +64,10 @@ export interface Annotation {
 
 export interface MapPayload {
   rover_pose: [number, number, number]
-  grid: number[]
+  /** Base64-encoded uint8 array (when grid_encoding === "base64_uint8")
+   *  or legacy float array (when grid_encoding is absent). */
+  grid: string | number[]
+  grid_encoding?: 'base64_uint8'
   grid_width: number
   grid_height: number
   grid_resolution_m: number
