@@ -36,7 +36,7 @@ The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **di
 ### ElevenLabs: MLH Best Use of ElevenLabs
 - **Prize:** wireless earbuds. 1 winner.
 - **Scope:** natural, human-sounding, emotionally expressive voice.
-- **Our role for it (revised):** voice out, **routed through Backboard** (`voice={"tts": {"provider": "elevenlabs", ...}}`), using our own ElevenLabs API key connected in the Backboard dashboard. Same accepted risk as Gemini above.
+- **Our role for it:** voice out, called **directly** (reverted back from Backboard-routed — Backboard's BYOK dashboard flow for connecting our own key was unverified/undocumented and blocked testing; direct is proven and testable now, and it's also the stronger direct-use claim for this specific track anyway).
 
 ### Baseten: Best Use of Baseten
 - **Prize (per member):** Grand: SF trip + final-round interviews + $200 credits + signed *Inference Engineering*. Runner-up: AirPods 4 + $100 credits + book. 2 winners.

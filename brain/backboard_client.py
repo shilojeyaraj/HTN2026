@@ -12,11 +12,6 @@ from backboard import BackboardClient
 
 MAX_TOOL_ROUNDS = 6
 
-# ElevenLabs voice, BYOK'd within Backboard (PRIZE_TRACKS.md). TODO: swap for the actual
-# voice picked from the ElevenLabs dashboard.
-TTS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
-TTS_MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
-
 
 class BackboardBrain:
     def __init__(self, llm_provider: str, model_name: str):
@@ -79,34 +74,10 @@ class BackboardBrain:
     def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-2.5-flash") -> str:
         return asyncio.run(self._describe(content, image_path, llm_provider, model_name))
 
-    async def _speak(self, text: str) -> str:
-        # send_to_llm="false": synthesize `text` itself, not the model's reply to it --
-        # per the docs, TTS otherwise "speaks the model's reply, not the text of the
-        # question itself". VERIFY this flag actually does that against the live SDK.
-        response = await self.client.send_message(
-            content=text,
-            voice={"tts": {"provider": "elevenlabs", "model": TTS_MODEL_ID, "voice": TTS_VOICE_ID}},
-            llm_provider=self.llm_provider,
-            model_name=self.model_name,
-            thread_id=self.thread_id,
-            assistant_id=self.assistant_id,
-            send_to_llm="false",
-        )
-        self.thread_id = response.thread_id
-        self.assistant_id = response.assistant_id
-        for message in response.messages:
-            records = message.get("voice_records") or {}
-            if records.get("tts"):
-                return records["tts"]["audio_url"]
-        raise RuntimeError("Backboard TTS response had no audio_url")
-
-    def speak_to_url(self, text: str) -> str:
-        return asyncio.run(self._speak(text))
-
 
 # Shared across the deliberative loop (brain/loop.py) so repeated episodes ride the same
-# mission thread — that's what makes `memory="Auto"` and shared history useful. Voice-in
-# stays direct Baseten STT (voice/stt.py), not routed through here (team decision:
-# Backboard doesn't document Baseten as a voice provider, so STT stays a separate slice).
+# mission thread — that's what makes `memory="Auto"` and shared history useful. Voice is
+# direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
+# TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
 # VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
 brain = BackboardBrain(llm_provider="google", model_name="gemini-2.5-pro")
