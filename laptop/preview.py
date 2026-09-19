@@ -32,7 +32,11 @@ def run_preview(serve):
     def update():
         nonlocal frames, measured_at
         if transcripts:
-            caption.configure(text=transcripts.popleft())
+            transcript = transcripts.popleft()
+            text = transcript["text"]
+            if transcript.get("error"):
+                text = "Transcription failed — listening…"
+            caption.configure(text=text if transcript["final"] else f"{text} … (provisional)")
         try:
             frame = pending.popleft()
         except IndexError:

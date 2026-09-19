@@ -30,8 +30,8 @@ def load_transcriber(model_name, cache_dir):
 
 
 @contextmanager
-def audio_transcription(transcribe, on_text, threshold=0.015):
-    """Finish utterances after 0.7 s of quiet; cap them at 10 s and RAM at two queued clips."""
+def audio_transcription(transcribe, on_text, threshold=0.015, partial_interval=0.8):
+    """Emit revisable partials during speech and finals after 0.7 s of quiet."""
     if transcribe is None:
         yield lambda samples: None
         return
@@ -41,20 +41,26 @@ def audio_transcription(transcribe, on_text, threshold=0.015):
     quiet = voiced = 0
     condition = threading.Condition()
     stopped = False
+    partial = None
+    utterance_id = 1
+    next_partial = int(AUDIO_RATE * 2 * partial_interval)
 
     def finish():
-        nonlocal quiet, voiced
-        if voiced >= int(AUDIO_RATE * 0.2):
-            with condition:
+        nonlocal quiet, voiced, partial, utterance_id, next_partial
+        with condition:
+            partial = None
+            if voiced >= int(AUDIO_RATE * 0.2):
                 if len(pending) == pending.maxlen:
                     logging.warning("Transcription overloaded: dropping oldest pending utterance")
-                pending.append(bytes(utterance))
+                pending.append((utterance_id, bytes(utterance), True))
                 condition.notify()
+            utterance_id += 1
         utterance.clear()
         quiet = voiced = 0
+        next_partial = int(AUDIO_RATE * 2 * partial_interval)
 
     def submit(samples):
-        nonlocal quiet, voiced
+        nonlocal quiet, voiced, partial, next_partial
         values = np.frombuffer(samples, dtype="<i2").astype(np.float32) / 32768
         speech = float(np.sqrt(np.mean(values * values))) >= threshold
         # ponytail: RMS gate needs tuning for noisy rooms; replace with streaming
@@ -73,20 +79,40 @@ def audio_transcription(transcribe, on_text, threshold=0.015):
         utterance.extend(samples)
         if quiet >= int(AUDIO_RATE * 0.7) or len(utterance) >= AUDIO_RATE * 2 * 10:
             finish()
+        elif speech and len(utterance) >= next_partial and voiced >= int(AUDIO_RATE * 0.2):
+            with condition:
+                partial = (utterance_id, bytes(utterance), False)
+                condition.notify()
+            next_partial = len(utterance) + int(AUDIO_RATE * 2 * partial_interval)
 
     def recognize():
+        nonlocal partial
+        previous = None
         while True:
             with condition:
-                condition.wait_for(lambda: pending or stopped)
-                if not pending:
+                condition.wait_for(lambda: pending or partial or stopped)
+                if pending:
+                    clip_id, pcm, final = pending.popleft()
+                elif partial:
+                    clip_id, pcm, final = partial
+                    partial = None
+                else:
                     return
-                pcm = pending.popleft()
             try:
                 text = transcribe(pcm)
-                if text:
-                    on_text(text)
             except Exception:
                 logging.exception("Transcription failed; continuing with the next utterance")
+                if final:
+                    on_text({"type": "transcript", "utterance_id": clip_id,
+                             "text": "", "final": True, "error": "transcription_failed"})
+                continue
+            with condition:
+                if not final and clip_id != utterance_id:
+                    continue  # This utterance ended while the partial was computing.
+            if final or (text and (clip_id, text) != previous):
+                on_text({"type": "transcript", "utterance_id": clip_id,
+                         "text": text, "final": final})
+                previous = (clip_id, text)
 
     worker = threading.Thread(target=recognize, daemon=True)
     worker.start()

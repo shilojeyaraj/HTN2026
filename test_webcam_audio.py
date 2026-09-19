@@ -76,7 +76,8 @@ class WebcamAudioTest(unittest.TestCase):
         self.assertGreaterEqual(len(frames), 30)
         self.assertGreaterEqual(len(audio), 50)
         self.assertEqual(len(processes), 2)
-        self.assertEqual(transcripts, ["test speech"])
+        self.assertTrue(transcripts[-1]["final"])
+        self.assertEqual(transcripts[-1]["text"], "test speech")
         self.assertFalse(leaked, "capture process leaked")
 
 

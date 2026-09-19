@@ -104,8 +104,8 @@ both capture processes on exit.
 ### Live preview and transcription
 
 The window opens on the first valid video frame, and its title reports display
-FPS. Transcripts appear after a pause in speech; they are not word-by-word
-streaming captions. Close the window or press Escape
+FPS. Provisional transcripts update while speech is arriving, then finalize after
+a pause. Provisional wording may change as more context arrives. Close the window or press Escape
 to stop the server. Old images in `test/` are left alone; no new images or audio
 files are saved on either device.
 
@@ -134,6 +134,13 @@ runs entirely on the laptop. Audio is not sent to a cloud transcription API.
 less compute, `small.en` for a larger English model, or `base` for multilingual
 speech. These tradeoffs need testing with the actual microphone/noise level.
 
+Recognition is fully hands-off: no push-to-talk button. We attempt a provisional
+update every 0.8 seconds of incoming speech (`--partial-interval` adjusts this).
+This is repeated recognition of a growing utterance, not token-by-token model
+streaming; actual update latency includes inference time. More frequent updates
+use more CPU. Only the newest pending partial is kept, finals take priority,
+and partials still computing after their utterance ends are suppressed.
+
 We keep 200 ms of audio before speech starts, finish an utterance after 0.7 s
 of quiet, and split continuous speech at 10 s. Very short sounds (<200 ms)
 are ignored. A simple RMS gate starts/stops clips; Whisper's VAD additionally
@@ -145,8 +152,12 @@ Up to two completed utterances can wait behind the active transcription.
 If inference falls behind, the oldest pending utterance is dropped with a
 warning so video remains responsive. Disconnect flushes the last utterance
 and drains the queue before accepting another Pi. No audio or transcript
-files are created; terminal JSON is `{"type":"transcript","text":"..."}`.
-The preview displays the newest transcript. Silence produces no text output.
+files are created. Terminal JSON includes `type: "transcript"`, `utterance_id`,
+`text`, and `final: false` for provisional updates / `final: true` for completed
+utterances. Replace text with the same utterance ID rather than appending each
+revision. IDs restart per TCP connection. An empty final clears a provisional
+that was not confirmed; failures emit an empty final with an `error` field.
+The preview labels provisional text and replaces it on finalization. Silence produces no text output.
 Speech recognition can make mistakes, especially in noisy rooms; these texts
 are not authorized movement commands.
 
