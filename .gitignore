@@ -27,3 +27,13 @@ Thumbs.db
 
 # Vite
 vite.config.*.timestamp-*
+.env
+.venv/
+venv/
+/test/*.jpg
+__pycache__/
+*.pyc
+.DS_Store
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

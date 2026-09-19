@@ -1,0 +1,9 @@
+backboard-sdk
+depthai
+elevenlabs
+requests
+python-dotenv
+numpy
+matplotlib
+sounddevice
+gpiozero

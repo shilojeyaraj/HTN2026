@@ -1,0 +1,552 @@
+{"prompt": "current position", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "go 0.3 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "what's around you", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "any obstacles", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "say I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "inch forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "yaw right 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "bear left 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "yaw left 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "backward 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "reverse 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "turn right 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "go 10.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "rotate right 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "turn to 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "retreat 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "describe what's ahead", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "call out Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "turn to 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "proceed forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "yaw left 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "turn left 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "turn -45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "reverse 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "crawl forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "rotate 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "yaw left 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "where are you", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "stop right there", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "report I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "cease movement", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "face -90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "head forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "move back 3.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "go straight 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "rotate right 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "turn left 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "give me a sitrep", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "pivot right 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "pivot left 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "back away 1.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "tell them The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "what's your situation", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "shout The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "rotate 15 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 15}}"}
+{"prompt": "go 1.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "hold up", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "rotate 90 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "report what you see", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "turn 15 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 15}}"}
+{"prompt": "face 45 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "advance 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "turn to 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "rotate -90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "turn left 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "roll forward 3.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "go forward 5.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "broadcast Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "pull back 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "call out I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "move backward 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "veer right 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "drive back 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "say \"Is anyone there? Can you hear me?\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "say \"I'm a rescue rover. I'm here to help.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "move forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "rotate to 15", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 15}}"}
+{"prompt": "drive 0.3 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "shout Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "don't move", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "where are you now", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "go back 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "move backward 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "turn 90 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "narrate The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "rotate to -90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "drive backward 1.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "report The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "rotate right 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "swing left 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "yaw right 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "yaw left 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "face 270 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 270}}"}
+{"prompt": "move backward 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "crawl forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "drive back 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "go ahead 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "proceed forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "narrate Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "report pose", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "go forward 0.3m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "drive back 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "veer left 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "straight ahead 0.3m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "move 10.0 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "roll forward 10.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "veer right 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "pull back 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "turn 60 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "inch forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "call out I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "drive backward 1.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "move backward 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "go ahead 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "rotate to 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "tell them I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "say Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "veer left 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "announce I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "face 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "speak The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "rotate to 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "shout I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "move 1.5 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "back away 0.3m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "go 1.5 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "backward 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "go forward 2.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "broadcast The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "proceed forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn to -180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "push forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "tell them Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "turn left 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "speak Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "face 90 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "face 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "straight ahead 1.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "go ahead 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "pivot left 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "pivot left 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "pivot right 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "bear left 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "move forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "say Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "pivot left 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "report I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "move forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "yaw right 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "broadcast Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "turn 270 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 270}}"}
+{"prompt": "turn right 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "move back 1.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "narrate I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "move ahead 5.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "reverse 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "head forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "report I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "drive backward 2.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "what's out there", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "turn -90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "back up 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "swing right 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "drive forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "position report", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "roll forward 5.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "drive backward 0.3m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "bear right 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "go back 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "move 5.0 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "roll forward 2.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "swing right 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "narrate I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "move 0.5 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "list obstacles", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "go straight 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "back away 1.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "what's your heading", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "tell them Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "show obstacles", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "inch forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "face -180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "announce Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "retreat 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn left 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "hold position", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "turn right 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "retreat 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "go forward 1.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "go backward 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "swing right 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "move 3.0 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "move back 0.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "say \"The area is safe. You can move now.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "speak I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "swing left 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "face -30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "hold", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "rotate right 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "back up 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "move ahead 3.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "head forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "rotate left 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "inch forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "backward 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn right 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "back up 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "tell them Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "speak I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "go back 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "bear right 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "back away 2.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "turn to -45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "go straight 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "backward 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "bear left 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "crawl forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "go straight 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "back up 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "back away 3.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "broadcast I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "go forward 1.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "turn left 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "go forward 3.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "inch forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "turn left 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "turn 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "rotate 120 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "turn left 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "halt", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "turn -180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "backward 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "move forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "turn 180 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "rotate to 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "broadcast I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "move forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "call out Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "go backward 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "shout I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "move forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "narrate I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "move 2.0 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "turn 30 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "advance 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "say Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "retreat 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "report Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "broadcast Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "veer left 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "go backward 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "drive backward 3.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate 30 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "speak I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "report Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "swing left 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "drive back 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "face 90 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "face 60 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "what's in front", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "say Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "rotate -45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "call out I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "rotate 180 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "swing right 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "announce Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "face 120 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "swing left 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "stop right now", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "turn 60 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "drive 5.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "pivot right 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "go ahead 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "give me your coordinates", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "turn right 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "rotate left 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "advance 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "yaw right 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "call out The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "rotate -30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "proceed forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "call out The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "what's in the way", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "turn 45 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "rotate to -30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "face 30 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "report The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "narrate Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "move ahead 10.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "bear right 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "pull back 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "drive forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "move ahead 1.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "report status", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "stop now", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "back away 0.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "scan ahead", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "tell them I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "report surroundings", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "move ahead 1.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "move ahead 0.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "crawl forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "pull back 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "say The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "push forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "pivot left 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "report I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "rotate right 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "head forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "say \"Can you make a sound if you can hear me?\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "go 5.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "announce The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "shout Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "push forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "veer left 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "swing right 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "back up 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "announce I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "advance 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "bear right 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "what's your location", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "broadcast Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "announce The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "stand by", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "announce I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "stop", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "face 45 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "move forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "back up 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "stop immediately", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "straight ahead 2.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "call out Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "go straight 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "turn 90 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "turn left 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "rotate left 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "say \"I detect a hazard. Marking the area.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "say I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "what obstacles are there", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "crawl forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "rotate -180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "say \"I've found someone. Sending location.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "stop moving", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "pivot right 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "freeze", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "speak Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "drive 3.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "what's your position", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "pivot left 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "rotate 45 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "head forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "head forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "rotate 60 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "report Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "swing left 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "go ahead 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "shout Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "shout I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "push forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "drive forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "push forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "go back 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "say The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "narrate I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "move forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "where am i", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "reverse 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "pivot right 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "rotate 45 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "yaw left 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "drive 1.5 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "go backward 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "announce Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "crawl forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "broadcast I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "face 15 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 15}}"}
+{"prompt": "call out I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "move backward 1.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "bear right 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "move ahead 0.3m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "veer left 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "proceed forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "bear left 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "tell them I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "face 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "shout The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "shout Is anyone there? Can you hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Is anyone there? Can you hear me?\"}}"}
+{"prompt": "narrate The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "rotate left 30", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "narrate Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "go straight 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "drive backward 0.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "veer right 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "tell them Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "turn to -90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "rotate 120 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "broadcast The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "go straight 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "face 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "hold still", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "turn right 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "inch forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "what do you see", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "face 180 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "brake", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "move back 2.0m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "move back 0.3m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "status report", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "face 180 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "turn left 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "check for obstacles", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "stay", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "drive 1.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "narrate Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "move 0.3 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "go straight 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "drive forward 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn to 15 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 15}}"}
+{"prompt": "go ahead 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "bear left 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "veer left 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "head forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "what can you detect", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "report Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "pull back 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn 120 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "turn left 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "turn 180 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "turn to -30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "inch forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "rotate 180 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "turn right 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "turn to 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "push forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "head forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "inch forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "move 1.0 meters forward", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "face 30 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "veer right 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "drive back 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "bear left 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "turn right 180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "say \"I hear you. I'm coming toward you.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "announce I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "what's ahead", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "rotate right 60", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "go 3.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "advance 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "roll forward 1.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "pull back 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "go back 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "wait", "completion": "{\"verb\": \"stop\", \"args\": {}}"}
+{"prompt": "go forward 0.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "say I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "straight ahead 5.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "drive forward 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate to 270", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 270}}"}
+{"prompt": "rotate to -45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "speak The path ahead is clear. Proceeding.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "reverse 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "turn 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "straight ahead 0.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn right 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "what's your state", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "veer right 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "roll forward 1.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "shout I'm a rescue rover. I'm here to help.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I'm a rescue rover. I'm here to help.\"}}"}
+{"prompt": "face 60 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 60}}"}
+{"prompt": "tell them I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "push forward 5.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 5.0}}"}
+{"prompt": "face -45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "rotate 90 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "drive 10.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "tell them The area is safe. You can move now.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The area is safe. You can move now.\"}}"}
+{"prompt": "pivot right 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "advance 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "turn right 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "turn 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "rotate 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "roll forward 0.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "yaw right 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "go 2.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "retreat 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "go backward 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "drive 2.0 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "go backward 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "speak Help is on the way. Stay calm.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "veer right 45 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "turn 120 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "current status", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "move back 1.5m", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "move ahead 2.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "say \"Stay where you are. Help is coming.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "straight ahead 10.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "say \"Help is on the way. Stay calm.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Help is on the way. Stay calm.\"}}"}
+{"prompt": "go ahead 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "backward 3.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate to -180", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -180}}"}
+{"prompt": "straight ahead 3.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate 60 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "go forward 10.0m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "advance 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "rotate 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "crawl forward 1.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
+{"prompt": "turn 45 degrees right", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -45}}"}
+{"prompt": "retreat 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "say \"The path ahead is clear. Proceeding.\"", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"The path ahead is clear. Proceeding.\"}}"}
+{"prompt": "announce Stay where you are. Help is coming.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Stay where you are. Help is coming.\"}}"}
+{"prompt": "swing right 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -120}}"}
+{"prompt": "bear right 90 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -90}}"}
+{"prompt": "say I hear you. I'm coming toward you.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I hear you. I'm coming toward you.\"}}"}
+{"prompt": "move backward 0.5 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn right 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "drive 0.5 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "turn to 270 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 270}}"}
+{"prompt": "push forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "broadcast I've found someone. Sending location.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I've found someone. Sending location.\"}}"}
+{"prompt": "go ahead 3.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 3.0}}"}
+{"prompt": "rotate 30 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "turn -30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -30}}"}
+{"prompt": "rotate 270 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 270}}"}
+{"prompt": "crawl forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "rotate to 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "proceed forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "report your state", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "yaw right 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "turn left 120 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "go back 2.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "look ahead", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "turn 30 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "where are you located", "completion": "{\"verb\": \"get_state\", \"args\": {}}"}
+{"prompt": "reverse 1.0 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "turn right 60 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": -60}}"}
+{"prompt": "call out Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "rotate left 90", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 90}}"}
+{"prompt": "speak Can you make a sound if you can hear me?", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"Can you make a sound if you can hear me?\"}}"}
+{"prompt": "drive back 0.3 meters", "completion": "{\"verb\": \"backward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "drive forward 2.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 2.0}}"}
+{"prompt": "report obstacles", "completion": "{\"verb\": \"get_obstacles\", \"args\": {}}"}
+{"prompt": "face 120 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "rotate left 45", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 45}}"}
+{"prompt": "proceed forward 10.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 10.0}}"}
+{"prompt": "drive forward 0.3 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "advance 0.5 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "speak I detect a hazard. Marking the area.", "completion": "{\"verb\": \"speak\", \"args\": {\"text\": \"I detect a hazard. Marking the area.\"}}"}
+{"prompt": "proceed forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "go 0.5 meters ahead", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.5}}"}
+{"prompt": "roll forward 0.3m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 0.3}}"}
+{"prompt": "turn 30 degrees left", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 30}}"}
+{"prompt": "swing left 120", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 120}}"}
+{"prompt": "yaw left 180 degrees", "completion": "{\"verb\": \"turn\", \"args\": {\"degrees\": 180}}"}
+{"prompt": "drive forward 1.0 meters", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.0}}"}
+{"prompt": "straight ahead 1.5m", "completion": "{\"verb\": \"forward\", \"args\": {\"distance_m\": 1.5}}"}
