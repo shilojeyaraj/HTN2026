@@ -18,6 +18,7 @@ Run:
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import math
@@ -131,7 +132,99 @@ class SimRover:
         self._running = False
 
 
-def execute_tool(name, args, rover, mapper, pose_est):
+def run_autonomy_test(command="search for survivors", episodes=3):
+    """Run the real Backboard brain against a simulated rover."""
+    asyncio.run(_async_autonomy_test(command, episodes))
+
+
+async def _async_autonomy_test(command, episodes):
+    """Async implementation — runs all episodes in one event loop."""
+    print("=" * 70)
+    print("LEVEL 3 AUTONOMY TEST — Real Backboard brain vs simulated rover")
+    print("=" * 70)
+    print(f"\nCommand: \"{command}\"")
+    print(f"Episodes: {episodes}")
+    print(f"Tools available: {len(VERBS)} verbs")
+    print(f"  Motion: forward, backward, turn, stop")
+    print(f"  Voice: speak")
+    print(f"  Sensors: get_obstacles, get_state, get_temperature, get_audio, get_gyro")
+    print(f"  Teammates: look_around, check_map, check_safety")
+    print(f"  Knowledge: search_knowledge, log_finding, analyze_patterns")
+    print()
+
+    rover = SimRover()
+    mapper = OccupancyMap(size_m=6.0, resolution_m=0.1)
+    pose_est = PoseEstimator()
+
+    for ep in range(episodes):
+        print(f"\n{'─' * 70}")
+        print(f"EPISODE {ep + 1}/{episodes}")
+        print(f"{'─' * 70}")
+
+        pose = rover.get_pose()
+        state = rover.get_state()
+        dets = rover.get_detections()
+
+        # Build the user content for the brain
+        scene = "Open space ahead" if not dets else f"{len(dets)} obstacles nearby, closest at {min(d['distance_m'] for d in dets):.1f}m"
+        user_content = (
+            f"Scene: {scene}\n"
+            f"Current goal: search for survivors in hazardous area\n"
+            f"User command: {command if ep == 0 else 'continue searching'}\n"
+            f"Pose: ({state['x']}, {state['y']}, {state['heading_deg']}°)"
+        )
+
+        print(f"\n  [INPUT] {user_content.replace(chr(10), ' | ')}")
+
+        # Run the real Backboard brain (call async method directly)
+        print(f"\n  [BRAIN] Calling Backboard (Gemini Pro) with {len(VERBS)} tools...")
+
+        def execute_tool(name, args):
+            return execute_tool_sync(name, args, rover, mapper, pose_est)
+
+        results = await brain._run_tools(
+            content=user_content,
+            system_prompt=SYSTEM_PROMPT,
+            tools=VERBS,
+            execute_tool=execute_tool,
+            memory="Auto",
+        )
+
+        print(f"\n  [RESULTS] Brain made {len(results)} tool call(s):")
+        for i, r in enumerate(results):
+            print(f"    {i + 1}. {r['name']}({json.dumps(r['arguments'])})")
+            print(f"       → {json.dumps(r['result'])}")
+
+        # Update map
+        pose = rover.get_pose()
+        mapper.add_trail(pose)
+        for d in dets:
+            mapper.add_depth(pose, d["bearing_deg"], max(0.0, 1.0 - d["distance_m"] / 3.0))
+        if rover.audio_event:
+            mapper.add_sound(pose, rover.audio_event["kind"], rover.audio_event.get("label", ""), rover.audio_db)
+        temp = rover.read_temperature()
+        mapper.add_heat(pose, temp["celsius"], temp["status"])
+
+        print(f"\n  [MAP] Trail: {len(mapper.trail)} points, "
+              f"Rover at ({state['x']}, {state['y']}, {state['heading_deg']}°)")
+
+        # Simulate finding a distress call in episode 2
+        if ep == 1:
+            print("\n  [SIM] Simulating distress call detected!")
+            rover.set_distress()
+        if ep == 2:
+            print("\n  [SIM] Simulating heat source detected!")
+            rover.set_heat(72.0)
+
+    print(f"\n{'=' * 70}")
+    print("AUTONOMY TEST COMPLETE")
+    print(f"{'=' * 70}")
+    print(f"Final rover pose: {rover.get_state()}")
+    print(f"Map trail points: {len(mapper.trail)}")
+    rover.stop()
+
+
+def execute_tool_sync(name, args, rover, mapper, pose_est):
     """Execute a brain tool call on the simulated rover."""
     pose = rover.get_pose()
 
@@ -222,92 +315,6 @@ def execute_tool(name, args, rover, mapper, pose_est):
         return rover.read_gyro()
 
     return {"status": "error", "detail": f"unknown verb {name}"}
-
-
-def run_autonomy_test(command="search for survivors", episodes=3):
-    """Run the real Backboard brain against a simulated rover."""
-    print("=" * 70)
-    print("LEVEL 3 AUTONOMY TEST — Real Backboard brain vs simulated rover")
-    print("=" * 70)
-    print(f"\nCommand: \"{command}\"")
-    print(f"Episodes: {episodes}")
-    print(f"Tools available: {len(VERBS)} verbs")
-    print(f"  Motion: forward, backward, turn, stop")
-    print(f"  Voice: speak")
-    print(f"  Sensors: get_obstacles, get_state, get_temperature, get_audio, get_gyro")
-    print(f"  Teammates: look_around, check_map, check_safety")
-    print(f"  Knowledge: search_knowledge, log_finding, analyze_patterns")
-    print()
-
-    rover = SimRover()
-    mapper = OccupancyMap(size_m=6.0, resolution_m=0.1)
-    pose_est = PoseEstimator()
-
-    for ep in range(episodes):
-        print(f"\n{'─' * 70}")
-        print(f"EPISODE {ep + 1}/{episodes}")
-        print(f"{'─' * 70}")
-
-        pose = rover.get_pose()
-        state = rover.get_state()
-        dets = rover.get_detections()
-
-        # Build the user content for the brain
-        scene = "Open space ahead" if not dets else f"{len(dets)} obstacles nearby, closest at {min(d['distance_m'] for d in dets):.1f}m"
-        user_content = (
-            f"Scene: {scene}\n"
-            f"Current goal: search for survivors in hazardous area\n"
-            f"User command: {command if ep == 0 else 'continue searching'}\n"
-            f"Pose: ({state['x']}, {state['y']}, {state['heading_deg']}°)"
-        )
-
-        print(f"\n  [INPUT] {user_content.replace(chr(10), ' | ')}")
-
-        # Run the real Backboard brain
-        print(f"\n  [BRAIN] Calling Backboard (Gemini Pro) with {len(VERBS)} tools...")
-
-        results = brain.run_tools(
-            content=user_content,
-            system_prompt=SYSTEM_PROMPT,
-            tools=VERBS,
-            execute_tool=lambda name, args: execute_tool(name, args, rover, mapper, pose_est),
-            memory="Auto",
-        )
-
-        print(f"\n  [RESULTS] Brain made {len(results)} tool call(s):")
-        for i, r in enumerate(results):
-            print(f"    {i + 1}. {r['name']}({json.dumps(r['arguments'])})")
-            print(f"       → {json.dumps(r['result'])}")
-
-        # Update map
-        pose = rover.get_pose()
-        mapper.add_trail(pose)
-        for d in dets:
-            mapper.add_depth(pose, d["bearing_deg"], max(0.0, 1.0 - d["distance_m"] / 3.0))
-        if rover.audio_event:
-            mapper.add_sound(pose, rover.audio_event["kind"], rover.audio_event.get("label", ""), rover.audio_db)
-        temp = rover.read_temperature()
-        mapper.add_heat(pose, temp["celsius"], temp["status"])
-
-        print(f"\n  [MAP] Trail: {len(mapper.trail)} points, "
-              f"Obstacles: {len(mapper.annotations)} annotations, "
-              f"Rover at ({state['x']}, {state['y']}, {state['heading_deg']}°)")
-
-        # Simulate finding a distress call in episode 2
-        if ep == 1:
-            print("\n  [SIM] Simulating distress call detected!")
-            rover.set_distress()
-        if ep == 2:
-            print("\n  [SIM] Simulating heat source detected!")
-            rover.set_heat(72.0)
-
-    print(f"\n{'=' * 70}")
-    print("AUTONOMY TEST COMPLETE")
-    print(f"{'=' * 70}")
-    print(f"Total tool calls: {sum(len(r) for r in [results])}")
-    print(f"Final rover pose: {rover.get_state()}")
-    print(f"Map trail points: {len(mapper.trail)}")
-    rover.stop()
 
 
 if __name__ == "__main__":

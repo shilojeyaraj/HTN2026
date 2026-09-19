@@ -97,7 +97,7 @@ class BackboardBrain:
         """Create the assistant, upload knowledge base + encounter history for RAG, load encounters into memory."""
         if self.assistant_id is None:
             assistant = await self.client.create_assistant(name="rescue-rover-brain")
-            self.assistant_id = assistant.id
+            self.assistant_id = assistant.assistant_id
         if not self._knowledge_uploaded:
             kb_dir = os.path.join(os.path.dirname(__file__), "..", "knowledge")
             for doc in ["rescue_protocols.md", "encounter_history.md"]:
