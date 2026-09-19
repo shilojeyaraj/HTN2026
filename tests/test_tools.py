@@ -1,6 +1,6 @@
 """Unit tests for the verb tool definitions (brain/tools.py).
 
-Pure logic, no network. Verifies the schema is well-formed and all 16 verbs
+Pure logic, no network. Verifies the schema is well-formed and all 17 verbs
 are present with required fields.
 """
 
@@ -8,11 +8,12 @@ from brain.tools import VERBS, SYSTEM_PROMPT
 
 
 class TestVerbSchema:
-    def test_all_sixteen_verbs_present(self):
+    def test_all_seventeen_verbs_present(self):
         names = {v["function"]["name"] for v in VERBS}
         assert names == {"forward", "backward", "turn", "stop", "speak",
                          "get_obstacles", "get_state",
                          "get_temperature", "get_audio", "get_gyro",
+                         "get_distance",
                          "look_around", "check_map", "check_safety",
                          "search_knowledge", "log_finding", "analyze_patterns"}
 

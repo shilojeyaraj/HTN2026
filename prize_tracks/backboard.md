@@ -82,7 +82,7 @@ The laptop runs faster-whisper locally (`laptop/audio.py`) for always-on speech 
 | Backboard feature | How we use it | File |
 |---|---|---|
 | **Agent loop** | `send_message` + `submit_tool_outputs_simple` (Inner Monologue) | `backboard_client.py` |
-| **Tool calling** | 16 verbs (10 motion/sensor + 6 teammate/RAG/memory/insights) | `tools.py` |
+| **Tool calling** | 17 verbs (10 motion/sensor + get_distance + 6 teammate/RAG/memory/insights) | `tools.py` |
 | **Memory (Auto)** | Conversation memory across episodes | `loop.py` |
 | **Memory (structured)** | `add_memory` for encounters + findings, `search_memories` for retrieval | `backboard_client.py` |
 | **Memory insights** | `get_memory_insights` for pattern analysis across all stored memory | `backboard_client.py` |
@@ -102,7 +102,7 @@ The laptop runs faster-whisper locally (`laptop/audio.py`) for always-on speech 
 |---|---|
 | `brain/backboard_client.py` | SDK wrapper, persistent thread, tool-calling loop, vision describe, RAG upload, memory search/log |
 | `brain/loop.py` | Deliberative episode: perceive → (parser fast-path) → Backboard brain → safety gate → execute → update map |
-| `brain/tools.py` | 16-verb tool schema + system prompt (motion, sensor, teammate, RAG, memory, insights) |
+| `brain/tools.py` | 17-verb tool schema + system prompt (motion, sensor, teammate, RAG, memory, insights) |
 | `knowledge/rescue_protocols.md` | RAG knowledge base: thermal, victim comms, audio distress, structural, search, triage, hazmat protocols |
 | `knowledge/encounter_history.md` | RAG + memory: 8 past rescue encounters with status, location, duration, and pattern summary |
 | `perception/vision.py` | Frame → Backboard (Gemini BYOK) → scene description |
@@ -116,6 +116,6 @@ The laptop runs faster-whisper locally (`laptop/audio.py`) for always-on speech 
 
 ## Demo narrative
 
-"The rover's brain is a Backboard agent — but it's not just one prompt. It's a harness. The brain calls 16 tools: motion verbs to drive, sensor reads to perceive, and teammate calls to coordinate with other agents. It calls `look_around` to ask the vision agent for a fresh scene description. It calls `check_map` to query the occupancy map for nearby obstacles and hazards. It calls `check_safety` to vet a risky move before executing. It calls `search_knowledge` to retrieve rescue protocols from a RAG knowledge base we uploaded to the assistant — thermal hazard approach, victim communication, structural collapse indicators — plus 8 past rescue encounters loaded into structured memory. It calls `log_finding` to store discoveries in Backboard's structured memory — every survivor found, every hazard identified, persisted across episodes. It calls `analyze_patterns` to learn from past encounters — Backboard analyzes rescue success rates, location patterns, and duration trends across all stored memory. One API, one thread, the whole cognitive stack — perception, planning, tool calling, RAG, structured memory, memory insights, conversation memory, spatial memory, and voice. Ten Backboard features in one rover."
+"The rover's brain is a Backboard agent — but it's not just one prompt. It's a harness. The brain calls 17 tools: motion verbs to drive, sensor reads to perceive, and teammate calls to coordinate with other agents. It calls `look_around` to ask the vision agent for a fresh scene description. It calls `check_map` to query the occupancy map for nearby obstacles and hazards. It calls `check_safety` to vet a risky move before executing. It calls `search_knowledge` to retrieve rescue protocols from a RAG knowledge base we uploaded to the assistant — thermal hazard approach, victim communication, structural collapse indicators — plus 8 past rescue encounters loaded into structured memory. It calls `log_finding` to store discoveries in Backboard's structured memory — every survivor found, every hazard identified, persisted across episodes. It calls `analyze_patterns` to learn from past encounters — Backboard analyzes rescue success rates, location patterns, and duration trends across all stored memory. One API, one thread, the whole cognitive stack — perception, planning, tool calling, RAG, structured memory, memory insights, conversation memory, spatial memory, and voice. Ten Backboard features in one rover."
 
-The strongest single-line pitch for this track: **the rover's entire deliberative mind is one Backboard thread** — 16 tools, 2 RAG documents, 8 pre-loaded encounters, structured mission memory, pattern analysis, conversation memory, vision, planning, and spatial awareness, all orchestrated through one API.
+The strongest single-line pitch for this track: **the rover's entire deliberative mind is one Backboard thread** — 17 tools, 2 RAG documents, 8 pre-loaded encounters, structured mission memory, pattern analysis, conversation memory, vision, planning, and spatial awareness, all orchestrated through one API.

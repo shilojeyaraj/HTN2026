@@ -1,5 +1,6 @@
 """Unit tests for the pose estimator and occupancy map accumulator."""
 
+import base64
 import math
 
 import numpy as np
@@ -127,7 +128,9 @@ class TestOccupancyMap:
         payload = m.to_payload((0.0, 0.0, 45.0))
         assert payload["grid_width"] == 20
         assert payload["grid_height"] == 20
-        assert len(payload["grid"]) == 400
+        assert payload["grid_encoding"] == "base64_uint8"
+        grid_bytes = base64.b64decode(payload["grid"])
+        assert len(grid_bytes) == 400
         assert payload["rover_pose"] == [0.0, 0.0, 45.0]
         assert len(payload["sound_sources"]) == 1
         assert payload["trail"] == []
