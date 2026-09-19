@@ -90,7 +90,7 @@ class BackboardBrain:
         self.assistant_id = response.assistant_id
         return response.content
 
-    def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-2.5-flash") -> str:
+    def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-3.1-flash-preview") -> str:
         return asyncio.run(self._describe(content, image_path, llm_provider, model_name))
 
     async def _ensure_initialized(self) -> None:
@@ -108,6 +108,15 @@ class BackboardBrain:
                     except Exception:
                         pass
             self._knowledge_uploaded = True
+            # Wait for documents to finish indexing
+            for _ in range(30):
+                try:
+                    docs = await self.client.list_assistant_documents(self.assistant_id)
+                    if all(d.status == "completed" for d in docs):
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(2)
         if not self._encounters_loaded:
             for enc in ENCOUNTERS:
                 try:
@@ -193,4 +202,4 @@ class BackboardBrain:
 # direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
 # TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
 # VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
-brain = BackboardBrain(llm_provider="google", model_name="gemini-2.5-pro")
+brain = BackboardBrain(llm_provider="google", model_name="gemini-3.1-pro-preview")
