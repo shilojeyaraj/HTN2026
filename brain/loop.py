@@ -56,6 +56,7 @@ def run_episode(state: RobotState, arbiter) -> RobotState:
         f"User command: {state.last_user_command}\n"
         f"Pose: {state.robot_pose}"
     )
+    state.last_user_command = None  # consume it -- act on a spoken command exactly once
 
     brain.run_tools(
         content=user_content,
