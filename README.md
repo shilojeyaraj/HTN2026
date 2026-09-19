@@ -50,13 +50,18 @@ and waits for a JSON reply before capturing again (no frame backlog).
 `--interval 0.2` sets the pause between completed rounds. Capture itself has
 a 10-second timeout. Camera startup per frame limits throughput initially.
 
-The laptop saves every valid received JPEG in the project's `test/` folder
-as `frame-<timestamp-in-nanoseconds>.jpg`, before depth inference, and logs
-the saved path. These are the original bytes received over TCP. Frames are
-ignored by Git and kept until you delete them. Restart the laptop server to
-pick up code changes; omit `--once` on the Pi to keep sending frames.
-This is a sequence of snapshots; continuous video will require persistent
-camera capture and sending frames independently of depth inference.
+The laptop opens a live preview window when the first valid frame arrives.
+Run the server from your laptop desktop session; Tkinter and Pillow display
+the incoming frames entirely in memory. No new images are saved on the laptop;
+previous captures in `test/` are left alone. Close the window or press Escape
+to stop the server. Use `--no-preview` for a headless session. Tkinter is
+included in many Python installations (on Ubuntu/Debian, install `python3-tk`
+if missing; custom Python builds also need Tk support).
+Restart the laptop server to pick up changes; no Pi code sync is needed.
+Omit `--once` on the Pi to keep sending frames. The UI stays responsive during
+inference, but frame rate is still limited by per-frame capture and inference.
+Smooth video will require persistent capture and transmission independent of
+depth inference.
 
 Replies contain `relative_proximity` for left/center/right (0 = relatively
 farther, 1 = relatively nearer), raw inverse-depth scores, a

@@ -4,7 +4,6 @@ import argparse
 import io
 import json
 import logging
-from pathlib import Path
 import socket
 import time
 
@@ -14,7 +13,6 @@ from PIL import Image
 from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
 
 MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
-FRAME_DIR = Path(__file__).resolve().parent.parent / "test"
 
 
 def summarize(depth):
@@ -53,8 +51,7 @@ def load_model(device):
     return infer
 
 
-def handle_connection(conn, infer, frame_dir=FRAME_DIR):
-    frame_dir.mkdir(parents=True, exist_ok=True)
+def handle_connection(conn, infer, show_frame=lambda image: None):
     while True:
         jpeg = receive(conn, MAX_FRAME)
         start = time.monotonic()
@@ -63,9 +60,7 @@ def handle_connection(conn, infer, frame_dir=FRAME_DIR):
                 if image.format != "JPEG" or max(image.size) > 1920:
                     raise ValueError("expected JPEG at most 1920 pixels per side")
                 rgb = image.convert("RGB")
-                path = frame_dir / f"frame-{time.time_ns()}.jpg"
-                path.write_bytes(jpeg)
-                logging.info("Saved received frame: %s", path)
+                show_frame(rgb)
                 result = summarize(infer(rgb))
         except Exception:
             logging.exception("Frame processing failed")
@@ -82,10 +77,19 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--device", default="cpu", help="cpu, cuda, or mps")
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--no-preview", action="store_true", help="run without a desktop window")
     args = parser.parse_args()
     if not np.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
     logging.basicConfig(level=logging.INFO)
+    if args.no_preview:
+        serve(args)
+    else:
+        from laptop.preview import run_preview
+        run_preview(lambda show_frame: serve(args, show_frame))
+
+
+def serve(args, show_frame=lambda image: None):
     infer = load_model(args.device)
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
@@ -99,9 +103,10 @@ def main():
                 conn.settimeout(args.timeout)
                 logging.info("Pi connected: %s", address)
                 try:
-                    handle_connection(conn, infer)
+                    handle_connection(conn, infer, show_frame)
                 except (EOFError, OSError, ValueError) as exc:
                     logging.info("Client disconnected: %s", exc)
+                    show_frame(None)
 
 
 if __name__ == "__main__":
