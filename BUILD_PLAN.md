@@ -30,6 +30,24 @@ Baseten directly. Section 1's role-map table and the "Revised" paragraph after i
 stale as a result — treat this note as the current truth for Baseten/voice-in until
 someone rewrites that table.
 
+**Resolved 2026-09-19 (later same day):** Gemini and ElevenLabs now route through
+Backboard too (BYOK — our own API keys, connected in the Backboard dashboard, not read by
+this app's code), per PRIZE_TRACKS.md's 2026-09-19 team decision. Implemented:
+`brain/backboard_client.py` gained `describe()` (vision, `files=[image_path]` +
+`llm_provider="google"`) and `speak_to_url()` (TTS, `voice={"tts": {"provider":
+"elevenlabs", ...}}`, returns an `audio_url` read from `response.messages[i]
+["voice_records"]["tts"]["audio_url"]` per the verified docs). `perception/vision.py` and
+`voice/tts.py` were rewritten against these; `brain/llm_client.py` (the direct
+OpenAI-compatible Gemini client) and the `elevenlabs`/`openai` SDK dependencies are gone.
+Baseten voice-in stays direct (unchanged) since Backboard doesn't document Baseten as a
+voice provider. **VERIFY** two things before the demo: whether `send_to_llm="false"`
+actually makes TTS synthesize the given text verbatim rather than a model-generated reply
+to it (the docs only confirm the latter is the default behavior), and the SDK's `files=`
+kwarg for vision against the installed `backboard-sdk` version. `.env.example` now only
+lists vars this app's code actually reads (`BACKBOARD_API_KEY`, `BASETEN_API_KEY`,
+`BASETEN_STT_MODEL_ID`) — `GEMINI_API_KEY`/`ELEVENLABS_API_KEY` still need to be obtained,
+but go into the Backboard dashboard, not `.env`.
+
 ---
 
 ## 1. Target role -> provider map (final, per PRIZE_TRACKS.md)

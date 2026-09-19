@@ -8,6 +8,14 @@ Judging is a **live demo** (not slides), scored on WOW factor, technical ability
 
 ## Committed tracks (build toward these five)
 
+**2026-09-19 team decision, overriding the "overlap trap" reasoning below for Gemini and
+ElevenLabs:** route them through Backboard (BYOK — our own Gemini/ElevenLabs API keys,
+connected in the Backboard dashboard, so Backboard calls them on our behalf) rather than
+calling their SDKs directly, accepting the risk that this is a weaker claim for their
+specific tracks than a direct call. Baseten stays a separate, direct slice (STT) since
+Backboard doesn't document Baseten as a voice provider. The original reasoning is kept
+below for context on what's being traded away.
+
 The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **directly and visibly**. If they are just models Backboard routes to under the hood, the claim is weak and possibly disqualifying, because those judges want to see their own API in the project. So each sponsor gets a **distinct, separately-demoable slice** that does not overlap. That means routing some pieces around Backboard on purpose.
 
 ### Backboard.io: Built on Backboard
@@ -23,19 +31,19 @@ The overlap trap: Gemini, ElevenLabs, and Baseten only count if we use them **di
 ### Gemini: MLH Best Use of Gemini API
 - **Prize:** Google Swag Kits. 1 winner.
 - **Scope:** push the boundaries of what is possible with the Gemini API.
-- **Our role for it:** vision / scene understanding, called **directly** via the Gemini API. Its multimodal is best-in-class, so this is a legitimate best use, not a token call.
+- **Our role for it (revised):** vision / scene understanding, **routed through Backboard** (`llm_provider="google"`), using our own Gemini API key connected in the Backboard dashboard. Accepted risk: this may count for less than a direct SDK call in judging.
 
 ### ElevenLabs: MLH Best Use of ElevenLabs
 - **Prize:** wireless earbuds. 1 winner.
 - **Scope:** natural, human-sounding, emotionally expressive voice.
-- **Our role for it:** voice out, called **directly**. The rover's spoken voice narrating decisions and answering commands.
+- **Our role for it (revised):** voice out, **routed through Backboard** (`voice={"tts": {"provider": "elevenlabs", ...}}`), using our own ElevenLabs API key connected in the Backboard dashboard. Same accepted risk as Gemini above.
 
 ### Baseten: Best Use of Baseten
 - **Prize (per member):** Grand: SF trip + final-round interviews + $200 credits + signed *Inference Engineering*. Runner-up: AirPods 4 + $100 credits + book. 2 winners.
 - **Scope:** creative, meaningful use of Baseten (inference or training).
-- **Our role for it:** voice in, a speech-to-text model (Whisper Large V3 Turbo) hosted on Baseten, called **directly**, so it does not collide with ElevenLabs. Optional bigger swing, deferred: fine-tune a small command-parser model on their H100 workstations (visit the booth to enable) once the core robot works — a side quest, not the track-qualifying deliverable.
+- **Our role for it:** voice in, a speech-to-text model (Whisper Large V3 Turbo) hosted on Baseten, called **directly** (not through Backboard — undocumented as a Backboard voice provider). Optional bigger swing, deferred: fine-tune a small command-parser model on their H100 workstations (visit the booth to enable) once the core robot works — a side quest, not the track-qualifying deliverable.
 
-**Cost of this division:** routing vision to Gemini, voice-out to ElevenLabs, and voice-in to Baseten directly means those three pieces bypass Backboard, so we use slightly less of Backboard's stack. That is the deliberate trade to make the other tracks real. Backboard still owns orchestration, planner routing, tools, and memory.
+**Cost of this division:** Gemini and ElevenLabs now go through Backboard (BYOK), which strengthens the Backboard track's "how much of the stack" story but weakens the direct-use claim for those two sponsors specifically. Baseten stays a separate direct slice for voice-in. Backboard owns orchestration, planner routing, tools, memory, vision, and voice-out.
 
 ---
 

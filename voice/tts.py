@@ -1,21 +1,25 @@
-"""ElevenLabs TTS playback. Always fired async so it never blocks the control loop."""
+"""Text-to-speech, routed through Backboard using ElevenLabs (BYOK'd within Backboard --
+team decision, PRIZE_TRACKS.md) rather than a direct ElevenLabs SDK call. Always fired
+async so it never blocks the control loop.
+"""
 
-import os
+import subprocess
+import tempfile
 import threading
 
-from elevenlabs.client import ElevenLabs
-from elevenlabs.play import play  # shells out to mpv/ffplay; `sudo apt install mpv` on the Pi
+import requests
 
-_client = ElevenLabs(api_key=os.environ.get("ELEVENLABS_API_KEY"))
-
-# TODO: pick the rover's actual voice from the ElevenLabs dashboard and swap this id.
-VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
-MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
+from brain.backboard_client import brain
 
 
 def _play(text: str) -> None:
-    audio = _client.text_to_speech.convert(text=text, voice_id=VOICE_ID, model_id=MODEL_ID)
-    play(audio)
+    audio_url = brain.speak_to_url(text)
+    response = requests.get(audio_url, timeout=10)
+    response.raise_for_status()
+    with tempfile.NamedTemporaryFile(suffix=".mp3") as f:
+        f.write(response.content)
+        f.flush()
+        subprocess.run(["mpv", "--no-video", f.name], check=False)  # `sudo apt install mpv` on the Pi
 
 
 def speak(text: str) -> None:

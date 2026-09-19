@@ -1,26 +1,18 @@
-import base64
+"""Scene understanding, routed through Backboard using Gemini (BYOK'd within Backboard --
+team decision, PRIZE_TRACKS.md) rather than a direct Gemini SDK call.
+"""
 
-from brain.llm_client import SCENE_AGENT
+import tempfile
+
+from brain.backboard_client import brain
 from brain.state import Detection
 
-SYSTEM_PROMPT = """You are the vision system of a small rover. Given a downscaled camera \
-frame and a list of on-camera object detections, describe the scene in 2-3 sentences: \
-notable objects, free space, and any hazards. Be concrete about direction and distance."""
+PROMPT = """Describe the scene in 2-3 sentences: notable objects, free space, and any \
+hazards. Be concrete about direction and distance."""
 
 
 def describe_scene(jpeg_bytes: bytes, detections: list[Detection]) -> str:
-    agent = SCENE_AGENT()
-    b64 = base64.b64encode(jpeg_bytes).decode()
-    response = agent.complete(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": f"Detections: {detections}"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                ],
-            },
-        ],
-    )
-    return response.choices[0].message.content
+    with tempfile.NamedTemporaryFile(suffix=".jpg") as f:
+        f.write(jpeg_bytes)
+        f.flush()
+        return brain.describe(content=f"{PROMPT}\nDetections: {detections}", image_path=f.name)
