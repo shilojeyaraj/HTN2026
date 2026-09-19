@@ -8,11 +8,12 @@ from brain.tools import VERBS, SYSTEM_PROMPT
 
 
 class TestVerbSchema:
-    def test_all_ten_verbs_present(self):
+    def test_all_eleven_verbs_present(self):
         names = {v["function"]["name"] for v in VERBS}
         assert names == {"forward", "backward", "turn", "stop", "speak",
                          "get_obstacles", "get_state",
-                         "get_temperature", "get_audio", "get_gyro"}
+                         "get_temperature", "get_audio", "get_gyro",
+                         "get_distance"}
 
     def test_each_verb_has_type_function(self):
         for verb in VERBS:

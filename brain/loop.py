@@ -21,7 +21,7 @@ from brain.state import RobotState
 from brain.tools import SYSTEM_PROMPT, VERBS
 from control.controller import execute_verb
 from perception import sensors
-# from perception import ultrasonic  # commented out — teammate is wiring HC-SR04
+from perception import ultrasonic
 from perception.camera import get_latest_detections, get_latest_frame
 from perception.vision import describe_scene
 from voice.tts import speak
@@ -55,8 +55,8 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter) -> dict:
         return sensors.read_audio()
     if name == "get_gyro":
         return sensors.read_gyro()
-    # if name == "get_distance":  # commented out — teammate is wiring HC-SR04
-    #     return ultrasonic.read_ultrasonic()
+    if name == "get_distance":
+        return ultrasonic.read_ultrasonic()
 
     state.safety_status = safety.check(name, args, get_latest_detections())
     if state.safety_status == "VETO":
