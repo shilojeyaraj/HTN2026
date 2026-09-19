@@ -17,6 +17,14 @@ pip install -r laptop/requirements.txt
 python3 -m laptop.server --host 0.0.0.0
 ```
 
+For this laptop's existing `venv` and downloaded test cache:
+
+```sh
+HF_HOME=/tmp/htn2026-hf venv/bin/python -m laptop.server --host 0.0.0.0
+```
+
+Use a writable `HF_HOME` if your environment points to `/opt/hf-cache`.
+
 The first start downloads [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf).
 Wait for `Ready` before starting the client. CPU is the default; use
 `--device cuda` or `--device mps` when supported by your PyTorch installation.
@@ -40,28 +48,49 @@ are needed on the Pi; there are no pip dependencies there.
 ```sh
 cd ~/HTN2026
 python3 -m pi.client --host LAPTOP_IP --once
-# Then repeat continuously, reconnecting after network failures:
-python3 -m pi.client --host LAPTOP_IP
+# Then stream continuously, reconnecting after network failures:
+python3 -m pi.client --host LAPTOP_IP --fps 15 --quality 70
 ```
 
-Each request captures a fresh 640×480 JPEG using `rpicam-still`, sends it,
-and waits for a JSON reply before capturing again (no frame backlog).
-`--timeout 30` sets network wait time; increase it if CPU inference is slower.
-`--interval 0.2` sets the pause between completed rounds. Capture itself has
-a 10-second timeout. Camera startup per frame limits throughput initially.
+Replace `LAPTOP_IP` with the laptop's actual hotspot address (last verified:
+`172.20.10.3`), never `0.0.0.0` or the Pi's address.
+
+One persistent [`rpicam-vid` process](https://www.raspberrypi.com/documentation/computers/camera_software.html#rpicam-vid)
+captures 640×480 MJPEG into a pipe at a target 15 FPS. Frames are sent over
+TCP while a separate thread receives depth results. The laptop displays
+incoming frames immediately and runs depth on the newest available frame;
+it drops older pending frames instead of queuing inference work. The Pi
+also keeps only its newest pending capture if transmission falls behind.
+TCP itself can still add delay on congested Wi-Fi; reduce `--fps` or
+`--quality` if needed. Actual preview FPS depends on the camera, Wi-Fi,
+and laptop load; 15 FPS is a target, not a measured hardware guarantee.
+`--timeout 30` limits camera inactivity and network waits, including gaps
+between depth results. Increase it if inference takes longer than 30 seconds.
+`--fps` replaces the old `--interval` flag. `--once` still sends one frame
+and waits for its depth result.
 
 The laptop opens a live preview window when the first valid frame arrives.
 Run the server from your laptop desktop session; Tkinter and Pillow display
-the incoming frames entirely in memory. No new images are saved on the laptop;
+the incoming frames entirely in memory. No frames are saved on either device;
 previous captures in `test/` are left alone. Close the window or press Escape
 to stop the server. Use `--no-preview` for a headless session. Tkinter is
 included in many Python installations (on Ubuntu/Debian, install `python3-tk`
 if missing; custom Python builds also need Tk support).
-Restart the laptop server to pick up changes; no Pi code sync is needed.
-Omit `--once` on the Pi to keep sending frames. The UI stays responsive during
-inference, but frame rate is still limited by per-frame capture and inference.
-Smooth video will require persistent capture and transmission independent of
-depth inference.
+For this streaming upgrade, re-run the sync step from your laptop and restart
+both server and Pi client. The desktop window remains responsive during depth
+inference. Stopping the Pi client also terminates its camera subprocess.
+
+The window title reports displayed FPS. To isolate CPU inference from camera,
+Wi-Fi, and display performance, restart the laptop server with `--no-depth`:
+
+```sh
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth
+```
+
+This mode skips model loading entirely and returns `status: "preview"` with
+no depth estimates. Re-sync the client before using it. Compare displayed FPS
+with and without depth enabled: an improvement implicates inference overhead;
+otherwise investigate capture/network/display or stale processes first.
 
 Replies contain `relative_proximity` for left/center/right (0 = relatively
 farther, 1 = relatively nearer), raw inverse-depth scores, a
@@ -71,6 +100,13 @@ third of the middle half of the image, normalized against that frame's
 collision probabilities**, and scores are not comparable across frames.
 Flat maps return `uncertain`; failed inference returns `error`.
 The preferred direction only identifies the relatively farther region.
+
+`frame_id` identifies the sampled frame's position in this TCP connection,
+starting at 1; gaps are expected because depth samples fewer frames than the
+preview displays. `processing_ms` measures depth processing time;
+`server_frame_age_ms` measures time from full frame receipt to result creation
+on the laptop. It excludes Pi capture and network transit. The old
+`capture_roundtrip_ms` field is removed because capture and replies now overlap.
 
 This milestone only prints results. It does not connect to the existing
 arbiter or motors. Before movement, add independent onboard obstacle sensing
@@ -85,11 +121,13 @@ python3 -m unittest test_camera_pipeline
 python3 -m pi.client --host 127.0.0.1 --image /path/to/photo.jpg --once
 ```
 
-The automated check covers fragmented TCP messages, length limits,
-disconnects, invalid JPEG recovery, and depth reduction with synthetic data.
+The automated check covers fragmented TCP/MJPEG messages, length limits,
+disconnects, invalid JPEG recovery, camera-process cleanup, depth reduction,
+and preview delivery plus frame dropping while synthetic inference is blocked.
 It does not download model weights or verify physical camera capture.
-Wire format: 4-byte unsigned big-endian length + JPEG request / UTF-8 JSON
-reply, maximum 2 MiB / 8 KiB respectively. One request is in flight at a time.
+Wire format: 4-byte unsigned big-endian length + JPEG upstream / UTF-8 JSON
+downstream, maximum 2 MiB / 8 KiB respectively. Directions are independent;
+only frames sampled by depth produce replies. JPEG/JSON framing is unchanged.
 
 ## Earlier full-stack scaffold (camera integration unfinished)
 

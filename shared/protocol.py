@@ -1,4 +1,7 @@
-"""One request/reply at a time: uint32 big-endian length, then JPEG or JSON."""
+"""Full-duplex TCP: uint32 big-endian length + JPEG upstream / JSON downstream.
+
+Depth replies identify the 1-based received frame_id; unsampled frames have no reply.
+"""
 
 import struct
 

@@ -3,6 +3,7 @@
 from collections import deque
 import logging
 import threading
+import time
 import tkinter as tk
 
 from PIL import ImageTk
@@ -15,6 +16,8 @@ def run_preview(serve):
     label = tk.Label(root)
     label.pack()
     pending = deque(maxlen=1)  # Display only the newest frame, never build a backlog.
+    frames = 0
+    measured_at = time.monotonic()
 
     def worker():
         try:
@@ -24,6 +27,7 @@ def run_preview(serve):
             pending.append(f"Server stopped: {exc}")
 
     def update():
+        nonlocal frames, measured_at
         try:
             frame = pending.popleft()
         except IndexError:
@@ -32,10 +36,19 @@ def run_preview(serve):
             if frame is None or isinstance(frame, str):
                 label.configure(image="", text=frame or "Pi disconnected — waiting for frames")
                 label.image = None
+                root.title("Pi camera — disconnected" if frame is None else "Pi camera — error")
+                frames = 0
+                measured_at = time.monotonic()
             else:
                 photo = ImageTk.PhotoImage(frame)
                 label.configure(image=photo, text="")
                 label.image = photo
+                frames += 1
+                now = time.monotonic()
+                if now - measured_at >= 1:
+                    root.title(f"Pi camera — {frames / (now - measured_at):.1f} display FPS")
+                    frames = 0
+                    measured_at = now
             root.deiconify()
         root.after(30, update)
 
