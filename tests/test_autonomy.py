@@ -230,9 +230,6 @@ def execute_tool_sync(name, args, rover, mapper, pose_est):
 
     if name == "forward":
         dist = args.get("distance_m", 0.5)
-        rover.publish_cmd_vel(0.3, 0.0)
-        time.sleep(min(dist / 0.3, 3.0))
-        rover.publish_cmd_vel(0.0, 0.0)
         dets = rover.get_detections()
         ahead = [d for d in dets if abs(d["bearing_deg"]) < 30 and d["distance_m"] < 0.3]
         if ahead:
@@ -240,21 +237,12 @@ def execute_tool_sync(name, args, rover, mapper, pose_est):
         return {"status": "completed", "distance_m": dist}
 
     if name == "backward":
-        dist = args.get("distance_m", 0.5)
-        rover.publish_cmd_vel(-0.3, 0.0)
-        time.sleep(min(dist / 0.3, 3.0))
-        rover.publish_cmd_vel(0.0, 0.0)
-        return {"status": "completed", "distance_m": dist}
+        return {"status": "completed", "distance_m": args.get("distance_m", 0.5)}
 
     if name == "turn":
-        degrees = args.get("degrees", 0)
-        rover.publish_cmd_vel(0.0, 60.0 if degrees > 0 else -60.0)
-        time.sleep(min(abs(degrees) / 60.0, 3.0))
-        rover.publish_cmd_vel(0.0, 0.0)
-        return {"status": "completed", "degrees": degrees}
+        return {"status": "completed", "degrees": args.get("degrees", 0)}
 
     if name == "stop":
-        rover.publish_cmd_vel(0.0, 0.0)
         return {"status": "completed"}
 
     if name == "speak":

@@ -30,7 +30,7 @@ ENCOUNTERS = [
 
 class BackboardBrain:
     def __init__(self, llm_provider: str, model_name: str):
-        self.client = BackboardClient(api_key=os.environ["BACKBOARD_API_KEY"])
+        self.client = BackboardClient(api_key=os.environ["BACKBOARD_API_KEY"], timeout=120)
         self.llm_provider = llm_provider
         self.model_name = model_name
         self.thread_id = None
@@ -90,7 +90,7 @@ class BackboardBrain:
         self.assistant_id = response.assistant_id
         return response.content
 
-    def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-3.1-flash-preview") -> str:
+    def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-3.5-flash") -> str:
         return asyncio.run(self._describe(content, image_path, llm_provider, model_name))
 
     async def _ensure_initialized(self) -> None:
@@ -202,4 +202,4 @@ class BackboardBrain:
 # direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
 # TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
 # VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
-brain = BackboardBrain(llm_provider="google", model_name="gemini-3.1-pro-preview")
+brain = BackboardBrain(llm_provider="google", model_name="gemini-3.5-flash")
