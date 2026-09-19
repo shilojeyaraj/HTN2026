@@ -76,4 +76,27 @@ export interface MapPayload {
   hazards: Hazard[]
   annotations: Annotation[]
   trail: number[][]
+  brain_activity?: BrainActivityEvent[]
+  sensor_state?: SensorSnapshot
+  insights?: PatternInsights | null
+}
+
+export interface BrainActivityEvent {
+  tool: string
+  args: Record<string, unknown>
+  result: Record<string, unknown>
+  timestamp: number
+}
+
+export interface SensorSnapshot {
+  temperature: { celsius: number; status: 'ok' | 'warm' | 'overheat' }
+  audio: { db: number; event: { kind: string; label: string } | null }
+  gyro: { pitch_deg: number; roll_deg: number; tipped: boolean; bump: boolean }
+}
+
+export interface PatternInsights {
+  summary?: string
+  rescue_rate?: string
+  avg_duration?: string
+  [key: string]: unknown
 }

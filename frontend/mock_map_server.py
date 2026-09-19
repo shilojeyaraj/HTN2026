@@ -120,9 +120,43 @@ def rover_pose(t: float) -> tuple[float, float, float]:
 trail: list[list[float]] = []
 
 
+# ── simulate brain activity ───────────────────────────────────────────────
+brain_events = []
+event_idx = 0
+
+SIM_EVENTS = [
+    ("search_knowledge", {"query": "search pattern"}, {"results": "Lawn-mowing pattern recommended for area coverage"}),
+    ("forward", {"distance_m": 0.5}, {"status": "completed"}),
+    ("get_obstacles", {}, {"detections": [{"distance_m": 1.3, "bearing_deg": 0}]}),
+    ("check_safety", {"action": "forward"}, {"status": "OK"}),
+    ("forward", {"distance_m": 1.0}, {"status": "completed"}),
+    ("get_temperature", {}, {"celsius": 38.5, "status": "warm"}),
+    ("speak", {"text": "Temperature rising, continuing search"}, {"status": "completed"}),
+    ("search_knowledge", {"query": "thermal hazard approach"}, {"results": "Stop, announce temperature, find alternate route"}),
+    ("turn", {"degrees": 45}, {"status": "completed"}),
+    ("get_audio", {}, {"db": 85, "event": {"kind": "distress", "label": "help me"}}),
+    ("speak", {"text": "I hear you. I'm a rescue rover. Help is on the way."}, {"status": "completed"}),
+    ("log_finding", {"finding_type": "survivor", "description": "distress call at (2.3, 1.1)"}, {"status": "logged"}),
+    ("check_map", {"radius_m": 3.0}, {"obstacles_nearby": 2, "sounds_nearby": 1}),
+    ("analyze_patterns", {}, {"rescue_rate": "50%", "avg_duration": "65 min", "best_location": "public infrastructure 75%"}),
+    ("forward", {"distance_m": 0.5}, {"status": "completed"}),
+    ("log_finding", {"finding_type": "area_explored", "description": "north corridor cleared"}, {"status": "logged"}),
+]
+
+sim_insights = {
+    "rescue_rate": "50% (4 of 8 encounters)",
+    "avg_duration": "65 minutes (rescued)",
+    "best_location_type": "Public infrastructure 75%",
+    "residential_rate": "33% (1 of 3)",
+    "total_encounters": "8",
+    "pattern": "Longer encounters correlate with rescue success",
+}
+
+
 async def handler(websocket):
     print(f"[mock-map] frontend connected: {websocket.remote_address}")
     t0 = time.time()
+    event_timer = 0
     while True:
         t = time.time() - t0
         pose = rover_pose(t)
@@ -131,6 +165,38 @@ async def handler(websocket):
         trail.append([pose[0], pose[1]])
         if len(trail) > 300:
             trail[:] = trail[-300:]
+
+        # emit a brain event every ~1.5s
+        if t - event_timer > 1.5:
+            global event_idx
+            if event_idx < len(SIM_EVENTS):
+                tool, args, result = SIM_EVENTS[event_idx]
+                brain_events.append({
+                    "tool": tool,
+                    "args": args,
+                    "result": result,
+                    "timestamp": time.time(),
+                })
+                event_idx += 1
+                event_timer = t
+            else:
+                # loop back
+                event_idx = 0
+                event_timer = t
+
+        # simulate sensor state
+        temp_c = 38.5 + 5.0 * math.sin(t * 0.2)
+        temp_status = "overheat" if temp_c >= 60 else "warm" if temp_c >= 40 else "ok"
+        db_val = 35.0 + 20.0 * abs(math.sin(t * 0.3))
+        audio_event = {"kind": "distress", "label": "help me"} if db_val > 80 else None
+        pitch = 5.0 * math.sin(t * 0.5)
+        roll = 3.0 * math.cos(t * 0.4)
+
+        sensor_snapshot = {
+            "temperature": {"celsius": round(temp_c, 1), "status": temp_status},
+            "audio": {"db": round(db_val, 1), "event": audio_event},
+            "gyro": {"pitch_deg": round(pitch, 1), "roll_deg": round(roll, 1), "tipped": False, "bump": False},
+        }
 
         grid_arr = np.array(grid, dtype=np.float32)
         grid_uint8 = np.clip(grid_arr * 255, 0, 255).astype(np.uint8)
@@ -148,6 +214,9 @@ async def handler(websocket):
             "hazards": hazards,
             "annotations": annotations,
             "trail": list(trail),
+            "brain_activity": brain_events[-10:],
+            "sensor_state": sensor_snapshot,
+            "insights": sim_insights if t > 5 else None,
         }
         await websocket.send(json.dumps(payload))
         await asyncio.sleep(1.0 / STREAM_HZ)

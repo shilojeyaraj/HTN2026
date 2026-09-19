@@ -18,7 +18,7 @@ import threading
 
 from dotenv import load_dotenv
 
-from brain.loop import run_episode
+from brain.loop import run_episode, brain_activity, sensor_state, mission_insights
 from brain.state import RobotState
 from control.arbiter import Arbiter
 from control.mapper import OccupancyMap
@@ -77,7 +77,8 @@ def main() -> None:
     )
     threading.Thread(target=reflex.run_forever, daemon=True).start()
 
-    map_server = MapServer(mapper, lambda: pose_estimator.pose)
+    map_server = MapServer(mapper, lambda: pose_estimator.pose,
+                          brain_activity, sensor_state, mission_insights)
     threading.Thread(target=map_server.run_forever, daemon=True).start()
 
     # Push-to-talk (optional, if GPIO button is wired)

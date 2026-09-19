@@ -20,12 +20,17 @@ from brain.backboard_client import brain
 from brain.state import RobotState
 from brain.tools import SYSTEM_PROMPT, VERBS
 from control.controller import execute_verb
+from control.telemetry import BrainActivity, SensorState, MissionInsights
 from perception import sensors
 from perception.camera import get_latest_detections, get_latest_frame
 from perception.vision import describe_scene
 from voice.tts import speak
 
 logger = logging.getLogger(__name__)
+
+brain_activity = BrainActivity()
+sensor_state = SensorState()
+mission_insights = MissionInsights()
 
 
 def _perceive(state: RobotState) -> RobotState:
@@ -43,43 +48,80 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None
     """Execute a single verb through the safety gate and controller."""
     if name == "speak":
         speak(args["text"])
+        brain_activity.log_call(name, args, {"status": "completed"})
         return {"status": "completed"}
     if name == "look_around":
         try:
             frame_jpeg, detections = get_latest_frame()
             state.scene_description = describe_scene(frame_jpeg, detections)
-            return {"scene": state.scene_description}
+            result = {"scene": state.scene_description}
+            brain_activity.log_call(name, args, result)
+            return result
         except Exception:
-            return {"error": "vision unavailable", "scene": state.scene_description or "unknown"}
+            result = {"error": "vision unavailable", "scene": state.scene_description or "unknown"}
+            brain_activity.log_call(name, args, result)
+            return result
     if name == "check_map":
         if mapper is not None:
-            return mapper.nearby_summary(state.robot_pose, args.get("radius_m", 3.0))
-        return {"error": "map not available"}
+            result = mapper.nearby_summary(state.robot_pose, args.get("radius_m", 3.0))
+            brain_activity.log_call(name, args, result)
+            return result
+        result = {"error": "map not available"}
+        brain_activity.log_call(name, args, result)
+        return result
     if name == "check_safety":
-        result = safety.check(args["action"], args, get_latest_detections())
-        return {"status": result, "action": args["action"]}
+        result_val = safety.check(args["action"], args, get_latest_detections())
+        result = {"status": result_val, "action": args["action"]}
+        brain_activity.log_call(name, args, result)
+        return result
     if name == "search_knowledge":
-        return brain.search_memory(args["query"])
+        result = brain.search_memory(args["query"])
+        brain_activity.log_call(name, args, result or {"results": "no results"})
+        return result or {"results": "no results"}
     if name == "log_finding":
-        return brain.log_finding(args["finding_type"], args["description"])
+        result = brain.log_finding(args["finding_type"], args["description"])
+        brain_activity.log_call(name, args, result or {"status": "logged"})
+        return result or {"status": "logged"}
     if name == "analyze_patterns":
-        return brain.get_insights()
+        result = brain.get_insights()
+        if result:
+            mission_insights.update(result)
+        brain_activity.log_call(name, args, result or {"insights": "no data"})
+        return result or {"insights": "no data"}
     if name == "get_obstacles":
-        return {"detections": get_latest_detections()}
+        result = {"detections": get_latest_detections()}
+        brain_activity.log_call(name, args, result)
+        return result
     if name == "get_state":
-        return {"pose": state.robot_pose, "velocity": state.velocity, "goal": state.current_goal}
+        result = {"pose": state.robot_pose, "velocity": state.velocity, "goal": state.current_goal}
+        brain_activity.log_call(name, args, result)
+        return result
     if name == "get_temperature":
-        return sensors.read_temperature()
+        temp = sensors.read_temperature()
+        sensor_state.update_temperature(temp["celsius"], temp["status"])
+        brain_activity.log_call(name, args, temp)
+        return temp
     if name == "get_audio":
-        return sensors.read_audio()
+        audio = sensors.read_audio()
+        sensor_state.update_audio(audio.get("db", 0), audio.get("event"))
+        brain_activity.log_call(name, args, audio)
+        return audio
     if name == "get_gyro":
-        return sensors.read_gyro()
+        gyro = sensors.read_gyro()
+        sensor_state.update_gyro(gyro.get("pitch_deg", 0), gyro.get("roll_deg", 0),
+                                 gyro.get("tipped", False), gyro.get("bump", False))
+        brain_activity.log_call(name, args, gyro)
+        return gyro
 
     state.safety_status = safety.check(name, args, get_latest_detections())
     if state.safety_status == "VETO":
-        return {"status": "vetoed", "reason": "obstacle ahead"}
+        result = {"status": "vetoed", "reason": "obstacle ahead"}
+        brain_activity.log_call(name, args, result)
+        return result
 
-    return execute_verb(name, args, arbiter, get_latest_detections)
+    result = execute_verb(name, args, arbiter, get_latest_detections)
+    brain_activity.log_call(name, args, result)
+    return result
 
 
 def _update_map(state: RobotState, mapper, pose_estimator, transcript_buffer=None) -> None:
