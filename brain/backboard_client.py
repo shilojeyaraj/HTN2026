@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from contextlib import suppress
 
 from backboard import BackboardClient
 from backboard.exceptions import BackboardAPIError
@@ -34,6 +35,8 @@ class BackboardBrain:
         self._pending_tool_outputs = None
         self._fallback = (fallback_provider, fallback_model)
         self._unavailable = None
+        self._memory_queue = None
+        self._memory_task = None
 
     def _get_client(self) -> BackboardClient:
         if self.client is None:
@@ -41,10 +44,50 @@ class BackboardBrain:
         return self.client
 
     async def aclose(self) -> None:
-        """Close the long-lived Backboard client during application shutdown."""
-        client, self.client = self.client, None
-        if client is not None:
-            await client.aclose()
+        """Drain queued memory briefly, then close the shared client once."""
+        try:
+            if getattr(self, "_memory_task", None) is not None:
+                try:
+                    await asyncio.wait_for(self._memory_queue.join(), timeout=5)
+                except TimeoutError:
+                    logger.warning("Backboard memory: shutdown drain timed out; unwritten context remains local")
+                finally:
+                    self._memory_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await self._memory_task
+                    self._memory_task = None
+        finally:
+            self._memory_queue = None
+            client, self.client = self.client, None
+            if client is not None:
+                await client.aclose()
+
+    def enqueue_memory(self, finding_type: str, description: str) -> bool:
+        """Queue persistence without putting Backboard on the movement path."""
+        # ponytail: bounded in-memory queue; use a durable outbox if crash recovery is needed.
+        if self._memory_queue is None:
+            self._memory_queue = asyncio.Queue(maxsize=32)
+        try:
+            self._memory_queue.put_nowait((finding_type, description))
+        except asyncio.QueueFull:
+            logger.warning("Backboard memory: queue full; keeping %s in local mission state", finding_type)
+            return False
+        if self._memory_task is None:
+            self._memory_task = asyncio.create_task(self._write_memories(), name="backboard-memory")
+        return True
+
+    async def _write_memories(self) -> None:
+        while True:
+            finding_type, description = await self._memory_queue.get()
+            started = time.monotonic()
+            try:
+                await asyncio.wait_for(self.log_finding(finding_type, description), timeout=15)
+                logger.info("Backboard memory: type=%s write_latency_s=%.3f", finding_type, time.monotonic() - started)
+            except Exception:
+                logger.warning("Backboard memory: type=%s write FAILED latency_s=%.3f; keeping local context",
+                               finding_type, time.monotonic() - started, exc_info=True)
+            finally:
+                self._memory_queue.task_done()
 
     @staticmethod
     def _message(response) -> dict:

@@ -50,6 +50,25 @@ def test_backboard_client_closes_once_at_shutdown():
     assert brain.client is None
 
 
+def test_background_memory_failure_does_not_stop_later_writes(caplog):
+    from unittest.mock import AsyncMock
+
+    brain = BackboardBrain("google", "unused")
+    client = SimpleNamespace(aclose=AsyncMock())
+    brain.client = client
+    brain.log_finding = AsyncMock(side_effect=[RuntimeError("temporarily unavailable"), {}])
+    async def run():
+        brain.enqueue_memory("hazard", "First finding")
+        brain.enqueue_memory("person", "Second finding")
+        await brain.aclose()
+    with caplog.at_level(logging.INFO):
+        asyncio.run(run())
+    assert brain.log_finding.await_count == 2
+    assert "write FAILED" in caplog.text and "write_latency_s=" in caplog.text
+    client.aclose.assert_awaited_once()
+    assert brain._memory_task is None and brain._memory_queue is None
+
+
 def test_planner_response_logs_only_operational_fields(caplog):
     class FailedResponse:
         status = "COMPLETED"
