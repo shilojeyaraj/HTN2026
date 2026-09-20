@@ -6,7 +6,7 @@ import math
 
 import cv2
 
-from control.robomaster import MAX_ROTATION_DEG, RoboMasterController
+from control.robomaster import DEFAULT_Z_SPEED_DPS, MAX_ROTATION_DEG, RoboMasterController
 
 
 def _spin(controller: RoboMasterController, degrees: float, z_speed: float) -> None:
@@ -27,7 +27,7 @@ def main() -> None:
     parser.add_argument("--turn-degrees", type=float, default=30)
     parser.add_argument("--spin-degrees", type=float, default=0,
                         help="additional signed chassis rotation; 360 performs one full spin")
-    parser.add_argument("--z-speed", type=float, default=20)
+    parser.add_argument("--z-speed", type=float, default=DEFAULT_Z_SPEED_DPS)
     parser.add_argument("--arm-x-mm", type=float, default=40,
                         help="relative arm extension; forward is positive")
     parser.add_argument("--arm-y-mm", type=float, default=30,

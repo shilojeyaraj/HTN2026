@@ -11,7 +11,7 @@ import time
 logger = logging.getLogger(__name__)
 
 DEFAULT_XY_SPEED_MPS = 0.5
-DEFAULT_Z_SPEED_DPS = 30.0
+DEFAULT_Z_SPEED_DPS = 90.0
 MAX_TRANSLATION_M = 1.0
 MAX_ROTATION_DEG = 180.0
 MAX_ARM_DELTA_MM = 80.0

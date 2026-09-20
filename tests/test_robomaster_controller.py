@@ -141,11 +141,11 @@ def test_discrete_movements_use_chassis_move_with_expected_coordinates():
     assert controller.turn(-30) == {"status": "completed"}
 
     assert ep.chassis.moves == [
-        {"x": 0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 30.0},
-        {"x": -0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 30.0},
-        {"x": 0, "y": 0.2, "z": 0, "xy_speed": 0.5, "z_speed": 30.0},
-        {"x": 0, "y": -0.2, "z": 0, "xy_speed": 0.5, "z_speed": 30.0},
-        {"x": 0, "y": 0, "z": -30, "xy_speed": 0.5, "z_speed": 30.0},
+        {"x": 0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
+        {"x": -0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
+        {"x": 0, "y": 0.2, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
+        {"x": 0, "y": -0.2, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
+        {"x": 0, "y": 0, "z": -30, "xy_speed": 0.5, "z_speed": 90.0},
     ]
 
 
