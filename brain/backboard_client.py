@@ -9,10 +9,13 @@ SDK verified against backboard-sdk v1.5.19:
 
 import asyncio
 import json
+import logging
 import os
 import threading
 
 from backboard import BackboardClient
+
+logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
 
