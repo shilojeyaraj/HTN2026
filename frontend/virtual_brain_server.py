@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 import websockets
+from websockets.exceptions import ConnectionClosed
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -236,6 +237,7 @@ sensor_state = SensorState()
 mission_insights = MissionInsights()
 trail = []
 brain_events = []
+transcript_messages = []  # real transcript from brain speech + STT
 last_brain_ts = 0.0
 last_pose = (0.0, 0.0, 0.0)
 brain_initialized = False
@@ -301,6 +303,14 @@ def execute_tool(name, args):
     if name == "speak":
         text = args.get("text", "")
         logger.info("[TTS] %s", text)
+        transcript_messages.append({
+            "id": f"msg-{len(transcript_messages)}",
+            "speaker": "rover",
+            "text": text,
+            "timestamp": time.strftime("%H:%M:%S"),
+        })
+        if len(transcript_messages) > 20:
+            transcript_messages[:] = transcript_messages[-20:]
         try:
             from voice.tts import speak
             speak(text)
@@ -539,6 +549,7 @@ async def handler(websocket):
             "brain_activity": brain_events[-10:],
             "sensor_state": sensor_state.snapshot(),
             "insights": mission_insights.get(),
+            "transcript": transcript_messages[-10:],
         }
 
         await websocket.send(json.dumps(payload, default=str))

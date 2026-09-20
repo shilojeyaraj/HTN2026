@@ -79,6 +79,7 @@ export interface MapPayload {
   brain_activity?: BrainActivityEvent[]
   sensor_state?: SensorSnapshot
   insights?: PatternInsights | null
+  transcript?: TranscriptMessage[]
 }
 
 export interface BrainActivityEvent {

@@ -32,12 +32,12 @@ export function Dashboard() {
           sensors={payload?.sensor_state ?? null}
           insights={payload?.insights ?? null}
         />
-        <Transcript
-          messages={activeEncounter.transcript}
-          listening
-          className="min-h-0"
-          bodyClassName="max-h-[280px]"
-        />
+      <Transcript
+        messages={payload?.transcript ?? activeEncounter.transcript}
+        listening
+        className="min-h-0"
+        bodyClassName="max-h-[280px]"
+      />
       </div>
     </div>
   )
