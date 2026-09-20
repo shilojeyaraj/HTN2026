@@ -98,7 +98,7 @@ def test_rate_limit_retries_planning_without_executing_a_tool(monkeypatch):
     brain = object.__new__(BackboardBrain)
     brain.client = RetryClient()
     brain.llm_provider = "google"
-    brain.model_name = "gemini-3.5-flash"
+    brain.model_name = "gemini-3.6-flash"
     brain.thread_id = None
     brain.assistant_id = None
     monkeypatch.setattr(brain, "_ensure_initialized", no_initialize)

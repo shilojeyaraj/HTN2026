@@ -177,4 +177,4 @@ class BackboardBrain:
 # direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
 # TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
 # VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
-brain = BackboardBrain(llm_provider="google", model_name="gemini-3.5-flash")
+brain = BackboardBrain(llm_provider="google", model_name="gemini-3.6-flash")

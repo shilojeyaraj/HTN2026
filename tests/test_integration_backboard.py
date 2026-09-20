@@ -23,7 +23,7 @@ async def test_backboard_send_message_returns_response():
     response = await client.send_message(
         content="Say 'rescue rover online' and nothing else.",
         llm_provider="google",
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.6-flash",
         memory="off",
     )
     assert response.content is not None
@@ -52,7 +52,7 @@ async def test_backboard_tool_calling_roundtrip():
     response = await client.send_message(
         content="What is the robot's current state? Call get_state.",
         llm_provider="google",
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.6-flash",
         tools=tools,
         memory="off",
     )
