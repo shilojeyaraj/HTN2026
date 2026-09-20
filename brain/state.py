@@ -16,6 +16,7 @@ class RobotState:
     target_aligned: bool = False
     last_target_position: float | None = None
     last_alignment_action: dict | None = None
+    target_tracking: str = "idle"  # idle / approaching / reacquiring
     scene_fresh: bool = False
     finished_goal: str | None = None
     search_active: bool = False

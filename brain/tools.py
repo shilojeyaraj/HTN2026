@@ -241,6 +241,17 @@ Outside the accepted range, scale corrections to horizontal offset: far off-cent
 allows a meaningful turn, moderate offset a moderate turn, slight offset a small one.
 This guidance applies to target centering, not obstacle avoidance or search turns.
 
+TARGET LOSS DURING APPROACH
+target_tracking is local executor state. Once approaching a visible mission target,
+if it leaves the frame, interrupt the approach: stop and reacquire it. Do not keep
+driving from its old position or mark the goal complete because it disappeared.
+The executor restarts the LOW/HIGH scan with fresh frames and interrupts it as soon
+as the target is visible again, using that same response for the next safe goal step.
+During reacquiring, set search_active true and choose only observation, camera, or
+search-turn actions while the target is absent. After a full scan without finding it,
+continue safe visual search; translations remain blocked until it is seen again.
+Fresh visibility and a clear route are required before resuming an approach.
+
 Once a target is detected, try to keep it visible. Favor coarse corrections when far
 away and finer corrections when close; avoid losing a known target through unnecessary
 large movements. Match completion to the request: finding something need not mean

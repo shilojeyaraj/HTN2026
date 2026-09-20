@@ -76,6 +76,7 @@ def _target_alignment_action(state: RobotState, decision: dict) -> tuple:
 
 def _reset_search(state: RobotState) -> None:
     _reset_alignment(state)
+    state.target_tracking = "idle"
     state.search_active = False
     state.search_direction = 0
     state.search_rotation_deg = 0.0
@@ -122,6 +123,7 @@ def _mission_context(state: RobotState) -> dict:
             "recent_observations": state.recent_observations[-8:], "findings": state.findings[-24:],
             "last_actions": state.last_actions[-8:], "prior_action_result": state.last_action_result,
             "last_camera_adjustment": state.last_camera_adjustment,
+            "target_tracking": state.target_tracking,
             "alignment_state": {"active_target": state.active_target, "target_aligned": state.target_aligned,
                                 "last_target_position": state.last_target_position,
                                 "last_alignment_action": state.last_alignment_action,
@@ -190,7 +192,7 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
     return result
 
 
-def _start_startup_scan(state: RobotState, controller: RoboMasterController) -> None:
+def _start_startup_scan(state: RobotState, controller: RoboMasterController, *, preserve_world: bool = False) -> None:
     if (type(SCAN_STEP_DEG) not in (int, float) or not math.isfinite(SCAN_STEP_DEG)
             or not 0 < SCAN_STEP_DEG <= 90):
         raise ValueError("SCAN_STEP_DEG must be within (0, 90] to fit bounded turn commands")
@@ -203,8 +205,9 @@ def _start_startup_scan(state: RobotState, controller: RoboMasterController) -> 
         raise ValueError("Scan camera offsets require -80 <= x <= 80 and 0 < LOW < HIGH <= 80 mm from home")
     logger.info("Startup scan started: step_deg=%s", SCAN_STEP_DEG)
     state.startup_scan_status = "scanning"
-    state.world_state = WorldState()
-    state.relative_heading_deg = 0.0
+    if not preserve_world:
+        state.world_state = WorldState()
+        state.relative_heading_deg = 0.0
     state.startup_scan_rotation_deg = 0.0
     result = _execute_verb("recenter_arm", {}, state, controller, direct=True)
     state.last_action_result = {"name": "recenter_arm", "arguments": {}, "result": result}
@@ -252,7 +255,7 @@ def _advance_startup_scan(state: RobotState, controller: RoboMasterController) -
     state.last_actions.append(state.last_action_result)
     del state.last_actions[:-8]
     state.last_frame_at = max(state.last_frame_at, time.monotonic())
-    _record_turn(state, result, searching=False)
+    _record_turn(state, result, searching=state.target_tracking == "reacquiring")
     if result.get("status") != "completed":
         _abort_startup_scan(state, controller, "turn failed; coverage is incomplete")
     state.startup_scan_rotation_deg += result["applied_args"]["degrees"]
@@ -334,6 +337,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
         if not user_command or command["verb"] == "stop":
             state.finished_goal = state.current_goal
             state.search_active = False
+            state.target_tracking = "idle"
         state.last_user_command = None
         if state.startup_scan_status == "scanning" and command["verb"] in PHYSICAL_ACTIONS:
             # Manual motion invalidates this fixed scan; never silently resume its arc.
@@ -397,6 +401,14 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
     state.retry_at, state.consecutive_failures = 0.0, 0
     if "world_observation" in decision:
         state.world_state.observe(decision["observation"], decision["world_observation"], observed_at)
+    if state.target_tracking == "reacquiring":
+        if decision["target_visible"]:
+            state.target_tracking = "approaching"
+            logger.info("Target reacquired; interrupting scan and resuming goal=%r", state.current_goal)
+        else:
+            # Losing sight never completes an approach, even after a full scan.
+            decision["goal_complete"] = False
+            decision["search_active"] = True
     if scanning:
         logger.info("Startup scan observation heading_deg=%s camera_height=%s view_quality=%s summary=%s",
                     state.world_state.robot["heading_deg"], state.world_state.robot["camera_height"],
@@ -433,7 +445,24 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
     state.recent_observations.append(decision["observation"])
     del state.recent_observations[:-8]
     state.last_user_command = None
+    if state.target_tracking == "approaching" and not decision["target_visible"]:
+        logger.info("Target lost during approach: target=%r goal=%r observation=%s; stopping and restarting scan",
+                    state.active_target, state.current_goal, decision["observation"])
+        state.target_tracking = "reacquiring"
+        _reset_alignment(state)
+        state.search_active = True
+        state.search_direction, state.search_rotation_deg = 1, 0.0
+        result = _execute_verb("stop", {}, state, controller, direct=True)
+        state.last_action_result = {"name": "stop", "arguments": {}, "result": result}
+        if result.get("status") != "completed":
+            raise InferenceUnavailable("Cannot restart target scan: stop failed")
+        _start_startup_scan(state, controller, preserve_world=True)
+        return state
     name, args = _target_alignment_action(state, decision)
+    if (state.target_tracking == "reacquiring" and name in PHYSICAL_ACTIONS
+            and name not in {"turn", "move_arm", "recenter_arm"}):
+        logger.info("Target still absent; suppressing tool=%s until reacquired", name)
+        name, args = "stop", {}
     logger.info("CLOSED_LOOP observation=%s", decision["observation"])
     logger.info("CLOSED_LOOP target_visible=%s", decision["target_visible"])
     logger.info("CLOSED_LOOP selected tool=%s args=%r goal_complete=%s", name, args, decision["goal_complete"])
@@ -446,7 +475,13 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
     started = time.monotonic()
     if decision["goal_complete"]:
         state.finished_goal = state.current_goal
+        state.target_tracking = "idle"
     elif name is not None:
+        if (state.current_goal and decision["target_visible"]
+                and name in {"forward", "backward", "strafe_left", "strafe_right"}):
+            # Keep tracking through intervening alignment/camera actions and even
+            # failed translations, which may have moved the chassis partially.
+            state.target_tracking = "approaching"
         state.scene_fresh = True
         result = _execute_verb(name, args, state, controller)
         state.scene_fresh = False

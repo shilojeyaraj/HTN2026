@@ -206,7 +206,7 @@ def test_visible_target_exits_at_either_height_and_approaches_without_extra_infe
         assert model.await_count == view_index + 1
         controller.forward.assert_called_once()
 
-        # Losing the target later uses normal planning, never resumes the fixed scan.
+        # Losing the target interrupts approach and starts a fresh scan at this pose.
         memory.enqueue_memory.side_effect = None
         controller.get_camera_state.side_effect = lambda: {"last_frame_monotonic_s": time.monotonic()}
         state.retry_at = 0
@@ -215,9 +215,13 @@ def test_visible_target_exits_at_either_height_and_approaches_without_extra_infe
         context = model.call_args.args[1]
         assert context["startup_scan"] == {"active": False, "step_deg": 60,
                                            "status": "target_found", "rotation_deg": heading}
-        controller.turn.assert_called_with(degrees=-15)
-        assert controller.move_arm.call_count == camera_moves
-        assert state.startup_scan_rotation_deg == heading and state.search_active
+        controller.stop.assert_called_once_with()
+        assert controller.turn.call_count == view_index // 2
+        assert controller.move_arm.call_count == camera_moves + 1
+        assert state.startup_scan_rotation_deg == 0 and state.search_active
+        assert state.startup_scan_status == "scanning" and state.target_tracking == "reacquiring"
+        assert state.world_state.robot["heading_deg"] == heading
+        assert len(state.world_state.observations) == view_index + 1
 
     with caplog.at_level(logging.INFO):
         asyncio.run(run())
