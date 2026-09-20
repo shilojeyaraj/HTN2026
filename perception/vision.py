@@ -5,7 +5,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.6-flash"
 _client = None
 
 PROMPT = """Describe the scene in 2-3 sentences: notable objects, free space, and any \

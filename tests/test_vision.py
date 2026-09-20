@@ -47,7 +47,7 @@ def test_describe_scene_sends_jpeg_to_gemini(monkeypatch):
         "created": 1,
         "closed": 1,
         "api_key": "test-key",
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3.6-flash",
         "contents": [{"data": b"jpeg", "mime_type": "image/jpeg"}, vision.PROMPT],
     }
 
