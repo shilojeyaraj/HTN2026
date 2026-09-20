@@ -239,6 +239,7 @@ brain_events = []
 last_brain_ts = 0.0
 last_pose = (0.0, 0.0, 0.0)
 brain_initialized = False
+brain_loop_started = False
 
 
 def execute_tool(name, args):
@@ -476,8 +477,10 @@ async def handler(websocket):
     """WebSocket handler — streams map + brain activity + sensors to frontend."""
     print(f"[virtual-brain] frontend connected: {websocket.remote_address}")
 
-    # Start brain loop in background if not running
-    if not brain_initialized:
+    # Start brain loop in background if not already running
+    global brain_loop_started
+    if not brain_loop_started:
+        brain_loop_started = True
         asyncio.create_task(brain_loop())
 
     period = 1.0 / STREAM_HZ
