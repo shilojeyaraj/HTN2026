@@ -3,6 +3,7 @@ import { BrainActivity } from '../components/BrainActivity'
 import { DrivingView3D } from '../components/DrivingView3D'
 import { MappingView3D } from '../components/MappingView3D'
 import { PatternInsightsCard } from '../components/PatternInsights'
+import { RatingPanel } from '../components/RatingPanel'
 import { SensorGauges } from '../components/SensorGauges'
 import { Transcript } from '../components/Transcript'
 import { useMapStream } from '../hooks/useMapStream'
@@ -22,19 +23,22 @@ export function Dashboard() {
         <SensorGauges sensors={payload?.sensor_state ?? null} />
         <BrainActivity events={payload?.brain_activity ?? []} />
         <PatternInsightsCard insights={payload?.insights ?? null} />
+        <RatingPanel brainEvents={payload?.brain_activity ?? []} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
         <AINarrative
           brainEvents={payload?.brain_activity ?? []}
           sensors={payload?.sensor_state ?? null}
           insights={payload?.insights ?? null}
         />
+        <Transcript
+          messages={activeEncounter.transcript}
+          listening
+          className="min-h-0"
+          bodyClassName="max-h-[280px]"
+        />
       </div>
-
-      <Transcript
-        messages={activeEncounter.transcript}
-        listening
-        className="min-h-0"
-        bodyClassName="max-h-[280px]"
-      />
     </div>
   )
 }

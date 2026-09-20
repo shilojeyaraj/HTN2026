@@ -474,7 +474,8 @@ async def brain_loop():
 
 
 async def handler(websocket):
-    """WebSocket handler — streams map + brain activity + sensors to frontend."""
+    """WebSocket handler — streams map + brain activity + sensors to frontend.
+    Also receives rating messages from the frontend for TTS evaluation."""
     print(f"[virtual-brain] frontend connected: {websocket.remote_address}")
 
     # Start brain loop in background if not already running
@@ -485,6 +486,21 @@ async def handler(websocket):
 
     period = 1.0 / STREAM_HZ
     while True:
+        # Check for incoming rating messages (non-blocking)
+        try:
+            msg = await asyncio.wait_for(websocket.recv(), timeout=0.01)
+            data = json.loads(msg)
+            if data.get("type") == "rating":
+                rating = data.get("rating")
+                logger.info("TTS rating received: %s for text id %s", rating, data.get("id"))
+                db._insert("tts_ratings", {
+                    "rating": rating,
+                    "text_id": data.get("id"),
+                    "timestamp": time.time(),
+                })
+        except (asyncio.TimeoutError, json.JSONDecodeError, ConnectionClosed):
+            pass
+
         pose = rover.get_pose()
 
         # Update trail

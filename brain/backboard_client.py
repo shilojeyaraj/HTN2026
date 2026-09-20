@@ -53,6 +53,12 @@ class BackboardBrain:
         self.thread_id = response.thread_id
         self.assistant_id = response.assistant_id
 
+        # Debug: log the response status to diagnose 0 tool calls
+        logger.info("brain response: status=%s, tool_calls=%s, content=%s",
+                    response.status,
+                    response.tool_calls is not None,
+                    (response.content or "")[:200])
+
         # Inner Monologue (CLAUDE.md section 7): feed each verb's REAL execution result
         # back to the model, not a trivial ack, so it can react (e.g. turn() after a
         # forward() that stopped_by_obstacle) within this same episode. Capped so a
