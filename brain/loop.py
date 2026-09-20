@@ -6,8 +6,8 @@ import json
 from brain import command_parser
 from brain.backboard_client import brain
 from brain.state import RobotState
-from brain.tools import SYSTEM_PROMPT, VERBS
-from control.robomaster import RoboMasterController, RoboMasterError
+from brain.tools import PHYSICAL_ACTIONS, SYSTEM_PROMPT, VERBS, validate_tool_args
+from control.robomaster import RoboMasterController
 from perception.camera import get_latest_frame
 from perception.vision import describe_scene
 from voice.tts import speak
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState:
+    state.scene_fresh = False
     try:
         logger.info("perception: requesting latest camera frame")
         frame_jpeg = get_latest_frame(controller)
@@ -26,6 +27,7 @@ def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState
             description = describe_scene(frame_jpeg)
             if description:
                 state.scene_description = description
+                state.scene_fresh = True
             else:
                 logger.warning("vision returned no scene description; keeping prior scene")
     except Exception:
@@ -33,34 +35,39 @@ def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState
     return state
 
 
-def _execute_verb(name: str, args: dict, state: RobotState, controller: RoboMasterController) -> dict:
+def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterController) -> dict:
     """Execute a planner tool without exposing the RoboMaster SDK to the planner."""
-    if name == "speak":
-        speak(args["text"])
-        return {"status": "completed"}
-    if name == "get_obstacles":
-        return controller.get_tof_distances()
-    if name == "get_state":
-        return {"chassis": controller.get_chassis_state(), "goal": state.current_goal}
-
-    movement = {
-        "forward": lambda: controller.forward(args["distance_m"]),
-        "backward": lambda: controller.backward(args["distance_m"]),
-        "strafe_left": lambda: controller.strafe_left(args["distance_m"]),
-        "strafe_right": lambda: controller.strafe_right(args["distance_m"]),
-        "turn": lambda: controller.turn(args["degrees"]),
-        "stop": controller.stop,
-        "move_arm": lambda: controller.move_arm(args.get("x_mm", 0), args.get("y_mm", 0)),
-        "recenter_arm": controller.recenter_arm,
-        "open_gripper": controller.open_gripper,
-        "close_gripper": controller.close_gripper,
-    }.get(name)
-    if movement is None:
-        return {"status": "error", "detail": f"unknown verb {name}"}
+    logger.info("Executing tool=%s args=%r", name, args)
     try:
-        return movement()
-    except (RoboMasterError, ValueError) as exc:
-        logger.warning("RoboMaster verb %s failed: %s", name, exc)
+        params = validate_tool_args(name, args)
+        if name in PHYSICAL_ACTIONS and not state.scene_fresh:
+            raise ValueError("physical action requires a fresh camera scene")
+    except ValueError as exc:
+        logger.error("Rejected tool=%s args=%r: %s", name, args, exc)
+        return {"status": "rejected", "detail": str(exc)}
+
+    # An attempted motion can change the view even if the hardware reports an error.
+    if name in PHYSICAL_ACTIONS:
+        state.scene_fresh = False
+    try:
+        if name == "speak":
+            speak(params.get("text"))
+            return {"status": "completed"}
+        if name == "get_obstacles":
+            return controller.get_tof_distances()
+        if name == "get_state":
+            return {"chassis": controller.get_chassis_state(), "goal": state.current_goal}
+        if name in {"forward", "backward", "strafe_left", "strafe_right"}:
+            result = getattr(controller, name)(params.get("distance_m"))
+        elif name == "turn" and params.get("degrees") == 0:
+            result = {"status": "completed", "detail": "zero turn; no movement"}
+        elif name == "move_arm" and not any(params.values()):
+            result = {"status": "completed", "detail": "zero arm delta; no movement"}
+        else:
+            result = getattr(controller, name)(**params)
+        return {**result, "applied_args": params}
+    except Exception as exc:
+        logger.exception("Tool=%s failed", name)
         return {"status": "error", "detail": str(exc)}
 
 
@@ -71,15 +78,18 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
     if state.last_user_command:
         parsed = command_parser.parse(state.last_user_command)
         if parsed is not None:
-            result = _execute_verb(parsed["verb"], parsed["args"], state, controller)
+            name = parsed.get("verb") if isinstance(parsed, dict) else None
+            args = parsed.get("args") if isinstance(parsed, dict) else parsed
+            result = _execute_verb(name, args, state, controller)
             logger.info("parser fast-path: %s -> %s -> %s", state.last_user_command, parsed, result)
-            state.last_action_result = {"name": parsed["verb"], "arguments": parsed["args"], "result": result}
+            state.last_action_result = {"name": name, "arguments": args, "result": result}
             state.last_user_command = None
             return state
 
     user_content = json.dumps(
         {
             "scene_description": state.scene_description,
+            "scene_fresh": state.scene_fresh,
             "robot_pose": controller.get_chassis_state(),
             "recent_transcript": state.last_user_command,
             "current_goal": state.current_goal,

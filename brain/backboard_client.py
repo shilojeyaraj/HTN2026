@@ -15,6 +15,8 @@ import time
 
 from backboard import BackboardClient
 
+from brain.tools import PHYSICAL_ACTIONS
+
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
@@ -33,6 +35,7 @@ class BackboardBrain:
         self.model_name = model_name
         self.thread_id = None
         self.assistant_id = None
+        self._pending_tool_outputs = None
 
     def _get_client(self) -> BackboardClient:
         if self.client is None:
@@ -77,7 +80,7 @@ class BackboardBrain:
         retrieved_memories = message.get("retrieved_memories") or []
         logger.info("Backboard planner: response latency=%.2fs", elapsed_s)
         logger.info("Backboard planner: assistant content=%s", message.get("content"))
-        logger.info("Backboard planner: tool calls=%d", len(tool_calls))
+        logger.info("Backboard planner: tool calls=%d", len(tool_calls) if isinstance(tool_calls, list) else 0)
         logger.info("Backboard planner: retrieved memories=%d", len(retrieved_memories))
         logger.info("Backboard planner: llm_error=%s", cls._is_llm_error(response))
 
@@ -106,35 +109,72 @@ class BackboardBrain:
 
     async def _run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str) -> list:
         await self._ensure_initialized()
-        response = await self._request_planner(content, system_prompt, tools, memory)
+        if self._pending_tool_outputs:
+            # The SDK resumes planning when outputs are submitted. Wait until this
+            # cycle has perceived again, then include that scene in the tool feedback.
+            outputs = [dict(output) for output in self._pending_tool_outputs]
+            last_result = json.loads(outputs[-1]["output"])
+            last_result["current_scene_and_state"] = content
+            outputs[-1]["output"] = json.dumps(last_result)
+            response = await self._submit_results(outputs)
+            self._pending_tool_outputs = None
+        else:
+            response = await self._request_planner(content, system_prompt, tools, memory)
         if response.status == "FAILED" or self._is_llm_error(response):
             return []
 
-        # Inner Monologue (CLAUDE.md section 7): feed each verb's REAL execution result
-        # back to the model, not a trivial ack, so it can react to a failed or completed
-        # command within this same episode. Capped so a
-        # misbehaving chain can't loop forever.
         results = []
         rounds = 0
         while response.status == "REQUIRES_ACTION" and rounds < MAX_TOOL_ROUNDS:
             tool_outputs = []
-            for call in response.tool_calls:
-                args = json.loads(call.function.arguments)
-                logger.info("Backboard planner: executing %s(%s)", call.function.name, args)
-                result = execute_tool(call.function.name, args)
-                results.append({"name": call.function.name, "arguments": args, "result": result})
-                tool_outputs.append({"tool_call_id": call.id, "output": json.dumps(result)})
+            physical_attempted = False
+            # Read raw calls so malformed argument JSON or SDK ToolCall validation
+            # cannot throw before the executor has a chance to reject the call.
+            calls = self._message(response).get("tool_calls")
+            if not isinstance(calls, list) or not calls:
+                logger.error("Rejected malformed tool_calls=%r", calls)
+                return results
+            for call in calls:
+                if not isinstance(call, dict) or not isinstance(call.get("id"), str) or not call.get("id"):
+                    logger.error("Rejected tool call without a valid id: %r", call)
+                    continue
+                function = call.get("function")
+                name = function.get("name") if isinstance(function, dict) else None
+                args = function.get("arguments") if isinstance(function, dict) else function
+                if physical_attempted:
+                    result = {"status": "skipped", "detail": "Not executed: replan after fresh perception."}
+                    logger.info("Skipped tool=%s args=%r: awaiting fresh perception", name, args)
+                else:
+                    result = execute_tool(name, args)
+                    results.append({"name": name, "arguments": args, "result": result})
+                    physical_attempted = (
+                        isinstance(name, str) and name in PHYSICAL_ACTIONS
+                        and result.get("status") != "rejected"
+                    )
+                tool_outputs.append({"tool_call_id": call["id"], "output": json.dumps(result)})
 
-            started = time.monotonic()
-            response = await self._get_client().submit_tool_outputs_simple(
-                thread_id=response.thread_id, tool_outputs=tool_outputs,
-            )
-            self._log_response(response, time.monotonic() - started)
-            if response.status == "FAILED" or self._is_llm_error(response):
+            if not tool_outputs:
                 return results
             rounds += 1
+            if physical_attempted or rounds == MAX_TOOL_ROUNDS:
+                self._pending_tool_outputs = tool_outputs
+                return results
+            response = await self._submit_results(tool_outputs)
+            if response.status == "FAILED" or self._is_llm_error(response):
+                return results
 
         return results
+
+    async def _submit_results(self, tool_outputs):
+        logger.info("Backboard planner: request start model=%s (tool results)", self.model_name)
+        started = time.monotonic()
+        response = await self._get_client().submit_tool_outputs_simple(
+            thread_id=self.thread_id, tool_outputs=tool_outputs,
+        )
+        self._log_response(response, time.monotonic() - started)
+        self.thread_id = response.thread_id or self.thread_id
+        self.assistant_id = response.assistant_id or self.assistant_id
+        return response
 
     async def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
         return await self._run_tools(content, system_prompt, tools, execute_tool, memory)

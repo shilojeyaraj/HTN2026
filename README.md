@@ -32,4 +32,6 @@ python3 main.py --goal "Explore this room in small steps and report people or ha
 
 The goal accompanies each planner decision alongside the latest scene description. The planner can call bounded `forward`, `backward`, `strafe_left`, `strafe_right`, `turn`, `stop`, `move_arm`, `recenter_arm`, `open_gripper`, and `close_gripper` tools. Motion uses `ep.chassis.move(...).wait_for_completed()`; `stop` uses `ep.chassis.drive_speed(x=0, y=0, z=0)`.
 
+Planner arguments are validated before execution: distances are clamped to 0.05–0.5 m, turns to ±45°, arm deltas to ±80 mm per axis, and speech to 240 characters. Missing/invalid arguments are logged and rejected without moving. Each perception cycle permits at most one chassis, arm, or gripper action. The remaining calls in that batch are marked skipped; tool results are submitted with fresh scene/state on the next cycle before replanning. Failed camera/vision reads block further physical actions until perception succeeds. Terminal logs include `Executing tool=... args=...` and rejection details.
+
 `get_state` exposes only telemetry received from the RoboMaster chassis. `get_obstacles` exposes raw onboard ToF readings in millimetres, with no inferred bearing. Camera frames come from the RoboMaster stream at 360p and are retried when a transient read returns no frame.

@@ -34,6 +34,7 @@ def test_planner_receives_dynamic_state_in_its_message(monkeypatch):
 
     assert json.loads(captured["content"]) == {
         "scene_description": "Clear path to the left.",
+        "scene_fresh": False,
         "robot_pose": {"position_m": [1.0, 2.0, 90.0]},
         "recent_transcript": "Please look left.",
         "current_goal": "Find the red chair.",
