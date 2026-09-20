@@ -1,11 +1,11 @@
 -r laptop/requirements.txt
 
 backboard-sdk
-depthai
 elevenlabs
 requests
 python-dotenv
 matplotlib
 sounddevice
-gpiozero
+robomaster
+opencv-python
 websockets
