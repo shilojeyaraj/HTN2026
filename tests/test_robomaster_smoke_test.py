@@ -1,4 +1,8 @@
-from robomaster_smoke_test import _spin
+import sys
+
+import pytest
+
+from robomaster_smoke_test import _spin, main
 
 
 class FakeController:
@@ -15,3 +19,10 @@ def test_spin_splits_a_full_rotation_into_bounded_turns():
     _spin(controller, 360, 20)
 
     assert controller.turns == [(180.0, 20), (180.0, 20)]
+
+
+def test_spin_requires_explicit_chassis_exercise(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["robomaster_smoke_test.py", "--spin-degrees", "360"])
+
+    with pytest.raises(SystemExit, match="2"):
+        main()

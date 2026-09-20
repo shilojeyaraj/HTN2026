@@ -20,9 +20,9 @@ With clear space around the robot, run:
 python3 robomaster_smoke_test.py
 ```
 
-The script moves forward 0.2 m at the SDK's minimum 0.5 m/s, turns 30°, stops, then saves `robomaster_test_frame.jpg` when the camera provides a frame. It always requests a stop and closes the SDK connection.
+By default, the script recentres the arm, moves it 40 mm forward and 30 mm up, opens and closes the gripper at low power, captures a frame from that view, then recentres the arm. It always pauses the gripper and closes the SDK connection.
 
-It also recentres the arm, moves it 40 mm forward and 30 mm up, opens and closes the gripper at low power, captures a frame from that view, then recentres the arm. Every motion is configurable; for example, add `--spin-degrees 360` for one chassis spin or `--skip-chassis` to test only the arm and gripper.
+Chassis motion is opt-in: add `--exercise-chassis` to move forward 0.2 m and turn 30°, or `--exercise-chassis --spin-degrees 360` for one full chassis spin. Every movement value is configurable.
 
 ## Agent runtime
 

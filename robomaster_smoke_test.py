@@ -35,11 +35,14 @@ def main() -> None:
     parser.add_argument("--gripper-power", type=int, default=25)
     parser.add_argument("--gripper-dwell-s", type=float, default=0.5)
     parser.add_argument("--frame-path", default="robomaster_test_frame.jpg")
-    parser.add_argument("--skip-chassis", action="store_true")
+    parser.add_argument("--exercise-chassis", action="store_true",
+                        help="also run the forward/turn/spin chassis exercise")
     parser.add_argument("--skip-arm", action="store_true")
     parser.add_argument("--skip-gripper", action="store_true")
     parser.add_argument("--skip-camera", action="store_true")
     args = parser.parse_args()
+    if args.spin_degrees and not args.exercise_chassis:
+        parser.error("--spin-degrees requires --exercise-chassis")
 
     logging.basicConfig(level=logging.INFO)
     controller = RoboMasterController()
@@ -48,7 +51,7 @@ def main() -> None:
         controller.connect()
         print("Connected to RoboMaster EP Core")
 
-        if not args.skip_chassis:
+        if args.exercise_chassis:
             controller.forward(args.forward_m, xy_speed=args.xy_speed)
             controller.turn(args.turn_degrees, z_speed=args.z_speed)
             _spin(controller, args.spin_degrees, args.z_speed)
