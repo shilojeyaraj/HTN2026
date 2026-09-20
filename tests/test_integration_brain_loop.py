@@ -45,6 +45,9 @@ def test_run_episode_with_fake_robomaster(startup_scan, visible_target):
                 await loop.run_episode(state, controller)
                 assert state.scene_description and state.consecutive_failures == 0
                 inference.assert_awaited_once()
+                if visible_target:
+                    assert state.active_target
+                    assert 0.40 <= state.last_target_position <= 0.60
                 if startup_scan:
                     if visible_target:
                         assert state.startup_scan_status == "target_found"

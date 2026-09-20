@@ -23,9 +23,59 @@ logger = logging.getLogger(__name__)
 MAX_MODEL_FAILURES = 5
 MEMORY_SUMMARY_INTERVAL = 10
 MAX_INSPECTED_VIEWPOINTS = 36
+# Camera-mount tuning: normalized image x; gain is a correction heuristic, not FOV telemetry.
+TARGET_CENTER_BAND = (0.40, 0.60)
+TARGET_ALIGNMENT_HOLD_BAND = (0.35, 0.65)
+TARGET_ALIGNMENT_GAIN_DEG = 60.0
+
+
+def _reset_alignment(state: RobotState) -> None:
+    state.active_target = None
+    state.target_aligned = False
+    state.last_target_position = None
+    state.last_alignment_action = None
+
+
+def _target_alignment_action(state: RobotState, decision: dict) -> tuple:
+    """Filter only visual centering turns; never synthesize an unplanned approach."""
+    name, args = decision["tool"], decision["args"]
+    target = decision["target_alignment"]
+    if target is None or not state.current_goal:
+        _reset_alignment(state)
+        return name, args
+    if target["target_id"] != state.active_target:
+        _reset_alignment(state)
+    state.active_target = target["target_id"]
+    x = state.last_target_position = target["center_x"]
+    within_deadband = TARGET_CENTER_BAND[0] <= x <= TARGET_CENTER_BAND[1]
+    held = state.target_aligned and TARGET_ALIGNMENT_HOLD_BAND[0] <= x <= TARGET_ALIGNMENT_HOLD_BAND[1]
+    state.target_aligned = within_deadband or held
+    category = ("roughly_centered" if within_deadband else
+                "far_left" if x < 0.20 else "left" if x < 0.5 else
+                "far_right" if x > 0.80 else "right")
+    correcting = target["turn_for_alignment"]
+    hysteresis_suppressed = correcting and held and not within_deadband
+    angle = None
+    if correcting:
+        requested = validate_tool_args(name, args)["degrees"]
+        # Keep a smaller planner-selected correction for constrained views; cap
+        # oversized turns proportionally and use the observed side for direction.
+        angle = (0.0 if state.target_aligned else
+                 math.copysign(min(abs(requested), TARGET_ALIGNMENT_GAIN_DEG * abs(0.5 - x)), 0.5 - x))
+        state.last_alignment_action = {
+            "requested_deg": requested, "correction_deg": angle,
+            "suppressed": state.target_aligned,
+            "reason": "aligned; preserve heading and take the next goal step" if state.target_aligned else "target off-center",
+        }
+        name, args = (None, {}) if angle == 0 else ("turn", {"degrees": angle})
+    logger.info("Target alignment target=%r position=%s center_x=%.3f within_deadband=%s aligned=%s "
+                "hysteresis_suppressed=%s correction_deg=%s",
+                state.active_target, category, x, within_deadband, state.target_aligned, hysteresis_suppressed, angle)
+    return name, args
 
 
 def _reset_search(state: RobotState) -> None:
+    _reset_alignment(state)
     state.search_active = False
     state.search_direction = 0
     state.search_rotation_deg = 0.0
@@ -72,6 +122,10 @@ def _mission_context(state: RobotState) -> dict:
             "recent_observations": state.recent_observations[-8:], "findings": state.findings[-24:],
             "last_actions": state.last_actions[-8:], "prior_action_result": state.last_action_result,
             "last_camera_adjustment": state.last_camera_adjustment,
+            "alignment_state": {"active_target": state.active_target, "target_aligned": state.target_aligned,
+                                "last_target_position": state.last_target_position,
+                                "last_alignment_action": state.last_alignment_action,
+                                "center_band": TARGET_CENTER_BAND, "hold_band": TARGET_ALIGNMENT_HOLD_BAND},
             "mission_context": state.mission_context[-8:],
             "search_active": state.search_active, "search_direction": state.search_direction,
             "search_rotation_deg": state.search_rotation_deg,
@@ -99,6 +153,10 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
     if name in PHYSICAL_ACTIONS:
         logger.info("Motion tool=%s requested=%r clamped=%r", name, args, params)
         state.scene_fresh = False
+        if direct or name in {"turn", "strafe_left", "strafe_right", "move_arm", "recenter_arm"}:
+            # These motions invalidate the previous image's alignment latch,
+            # including partially failed moves. Forward approach retains it.
+            state.target_aligned = False
     if name in {"forward", "backward", "strafe_left", "strafe_right"}:
         state.world_state.bearings_stale = True
     try:
@@ -375,7 +433,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
     state.recent_observations.append(decision["observation"])
     del state.recent_observations[:-8]
     state.last_user_command = None
-    name, args = decision["tool"], decision["args"]
+    name, args = _target_alignment_action(state, decision)
     logger.info("CLOSED_LOOP observation=%s", decision["observation"])
     logger.info("CLOSED_LOOP target_visible=%s", decision["target_visible"])
     logger.info("CLOSED_LOOP selected tool=%s args=%r goal_complete=%s", name, args, decision["goal_complete"])

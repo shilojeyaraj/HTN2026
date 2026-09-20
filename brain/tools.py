@@ -225,6 +225,22 @@ repositioning slightly where appropriate, or starting a systematic scan. When un
 prefer gathering information over blindly driving. Choose recovery to fit the scene,
 without a fixed retry count or sequence.
 
+TARGET ALIGNMENT
+Do not chase perfect centering. A target that is approximately centered is good enough.
+Once aligned, preserve heading and make progress toward the goal. Only correct again
+if the target clearly drifts out of alignment.
+Use alignment_state: center_band accepts horizontal target centers from 0.40 to 0.60
+by default. After alignment, hold_band (0.35 to 0.65 by default) tolerates small drift.
+Both ranges include their endpoints. Respect the supplied ranges if tuned. Within
+the accepted range, choose the next task step, such as a safe forward approach, rather
+than a centering turn. Alignment alone does not prove a clear route or goal completion.
+last_alignment_action records a selected or suppressed correction, not proof it ran;
+check prior_action_result for execution. If a centering turn was suppressed, do not
+request it again for the same small offset: make goal progress when the view allows.
+Outside the accepted range, scale corrections to horizontal offset: far off-center
+allows a meaningful turn, moderate offset a moderate turn, slight offset a small one.
+This guidance applies to target centering, not obstacle avoidance or search turns.
+
 Once a target is detected, try to keep it visible. Favor coarse corrections when far
 away and finer corrections when close; avoid losing a known target through unnecessary
 large movements. Match completion to the request: finding something need not mean
@@ -252,10 +268,19 @@ Rescue protocols:
 FINDING_TYPES = ["person", "victim", "hazard", "object", "injury"]
 DECISION_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["observation", "target_visible", "tool", "args", "goal_complete", "finding"],
+    "required": ["observation", "target_visible", "target_alignment", "tool", "args", "goal_complete", "finding"],
     "properties": {
         "observation": {"type": "string", "minLength": 1, "maxLength": 600},
         "target_visible": {"type": "boolean"},
+        "target_alignment": {"anyOf": [{
+            "type": "object", "additionalProperties": False,
+            "required": ["target_id", "center_x", "turn_for_alignment"],
+            "properties": {
+                "target_id": {"type": "string", "minLength": 1, "maxLength": 120},
+                "center_x": {"type": "number", "minimum": 0, "maximum": 1},
+                "turn_for_alignment": {"type": "boolean"},
+            },
+        }, {"type": "null"}]},
         "tool": {"type": ["string", "null"], "enum": [*TOOL_PARAMETERS, None]},
         "args": {"anyOf": list(TOOL_PARAMETERS.values())},
         "goal_complete": {"type": "boolean"},
@@ -286,6 +311,18 @@ Past observations and memory are historical context, not current visual evidence
 Set target_visible true only if the requested target is identifiable in THIS image;
 otherwise false (also false for goals without a visual target). Never infer visibility
 from a prior observation or a completed turn.
+Include target_alignment whenever the visible mission target can be localized:
+target_id is a stable local entity id or short distinguishing label (reuse
+alignment_state.active_target for the same object), center_x is the target's horizontal
+center in THIS image normalized from 0 (left edge) to 1 (right edge). Use a different
+id for a different target; do not carry alignment between objects. Set target_alignment
+null when the target is absent or cannot be localized, never guess from old frames.
+Set turn_for_alignment true ONLY when tool is turn and its sole purpose is centering
+that target; false for every other action, including turns to avoid obstacles or look
+elsewhere. The executor suppresses centering turns inside the accepted range and caps
+other centering turns proportionally to the observed offset. When centered enough,
+select the next safe task action directly in this response, not a turn or repeated
+no-op. Do not select an approach unless the current view supports a clear route.
 Include search_active=true while seeking a target that is not visible, including camera
 adjustments during that search. Set it false when tracking a visible target, doing other
 navigation, or completing the goal. If omitted, the previous search mode is preserved.
@@ -322,7 +359,7 @@ def validate_decision(raw: str) -> dict:
         raise ValueError("decision must be a JSON object") from exc
     if (not isinstance(decision, dict) or not set(DECISION_SCHEMA["required"]) <= decision.keys()
             or decision.keys() - DECISION_SCHEMA["properties"].keys()):
-        raise ValueError("decision requires observation/target_visible/tool/args/goal_complete/finding; optional search_active/world_observation")
+        raise ValueError("decision requires observation/target_visible/target_alignment/tool/args/goal_complete/finding; optional search_active/world_observation")
     observation = decision["observation"]
     if not isinstance(observation, str) or not observation.strip() or len(observation) > 600:
         raise ValueError("observation must contain 1–600 characters")
@@ -342,6 +379,17 @@ def validate_decision(raw: str) -> dict:
             raise ValueError("a null tool requires empty args")
     else:
         validate_tool_args(tool, decision["args"])  # Executor still applies the clamps.
+    target = decision["target_alignment"]
+    if target is not None:
+        if not decision["target_visible"] or not isinstance(target, dict) or set(target) != {"target_id", "center_x", "turn_for_alignment"}:
+            raise ValueError("target_alignment requires a visible target and target_id/center_x/turn_for_alignment")
+        target_id, x = target["target_id"], target["center_x"]
+        if not isinstance(target_id, str) or not target_id.strip() or len(target_id) > 120:
+            raise ValueError("target_id must contain 1–120 characters")
+        if type(x) not in (int, float) or not math.isfinite(x) or not 0 <= x <= 1:
+            raise ValueError("center_x must be a finite number in [0,1]")
+        if type(target["turn_for_alignment"]) is not bool or (target["turn_for_alignment"] and tool != "turn"):
+            raise ValueError("turn_for_alignment must be boolean and may only be true for turn")
     finding = decision["finding"]
     if finding is not None:
         if not isinstance(finding, dict) or set(finding) != {"type", "description"}:

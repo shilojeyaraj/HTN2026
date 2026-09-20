@@ -21,7 +21,7 @@ from shared.inference import InferenceUnavailable
 def decision(tool="turn", args=None, **extra):
     return json.dumps({"observation": "Red chair is to the left.", "tool": tool,
                        "args": {"degrees": 45} if args is None else args,
-                       "goal_complete": False, "target_visible": True, "finding": None, **extra})
+                       "goal_complete": False, "target_visible": True, "target_alignment": None, "finding": None, **extra})
 
 
 @pytest.fixture
