@@ -104,6 +104,39 @@ annotations = [
 ]
 
 
+# ── progressive LiDAR mapping ─────────────────────────────────────────────
+# `grid` above is the TRUE environment. The rover only sees what its LiDAR
+# has swept, so we keep a separate observed grid that starts fully unknown
+# (0.5) and fills in as rays from the rover reveal cells.
+true_grid = list(grid)
+observed_grid = [0.5] * (GW * GH)
+LIDAR_RANGE_M = 4.0
+LIDAR_FOV_DEG = 120
+LIDAR_RAYS = 48
+
+
+def lidar_sweep(pose: tuple[float, float, float]) -> None:
+    """Ray-cast from the rover into the true grid, revealing cells into observed_grid."""
+    x, y, heading = pose
+    half_fov = LIDAR_FOV_DEG / 2
+    for i in range(LIDAR_RAYS):
+        angle = math.radians(heading - half_fov + (LIDAR_FOV_DEG * i / (LIDAR_RAYS - 1)))
+        dx, dy = math.cos(angle), math.sin(angle)
+        steps = int(LIDAR_RANGE_M / RES)
+        for s in range(steps):
+            wx = x + dx * s * RES
+            wy = y + dy * s * RES
+            col, row = world_to_grid(wx, wy)
+            # match the row flip used when building the true grid
+            row = GH - 1 - row
+            if not (0 <= col < GW and 0 <= row < GH):
+                break
+            idx = row * GW + col
+            observed_grid[idx] = true_grid[idx]
+            if true_grid[idx] > 0.6:
+                break  # ray blocked by obstacle
+
+
 # ── simulate rover movement (figure-8) ────────────────────────────────────
 def rover_pose(t: float) -> tuple[float, float, float]:
     """Figure-8 path centered at origin, ~8m wide."""
@@ -166,6 +199,9 @@ async def handler(websocket):
         if len(trail) > 300:
             trail[:] = trail[-300:]
 
+        # LiDAR sweep reveals the environment progressively
+        lidar_sweep(pose)
+
         # emit a brain event every ~1.5s
         if t - event_timer > 1.5:
             global event_idx
@@ -198,7 +234,7 @@ async def handler(websocket):
             "gyro": {"pitch_deg": round(pitch, 1), "roll_deg": round(roll, 1), "tipped": False, "bump": False},
         }
 
-        grid_arr = np.array(grid, dtype=np.float32)
+        grid_arr = np.array(observed_grid, dtype=np.float32)
         grid_uint8 = np.clip(grid_arr * 255, 0, 255).astype(np.uint8)
         grid_b64 = base64.b64encode(grid_uint8.tobytes()).decode("ascii")
 
