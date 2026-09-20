@@ -14,6 +14,8 @@ so the frontend can render a live area map.
 """
 
 import logging
+import math
+import time
 
 from brain import command_parser, safety
 from brain.backboard_client import brain
@@ -32,6 +34,16 @@ logger = logging.getLogger(__name__)
 brain_activity = BrainActivity()
 sensor_state = SensorState()
 mission_insights = MissionInsights()
+
+# Rate limiting: the brain only calls Backboard when an event triggers.
+# This prevents burning API credits on every 1-second tick when nothing changes.
+MIN_BRAIN_GAP_S = 10.0  # minimum seconds between brain calls unless an event triggers
+OBSTACLE_CLOSE_M = 0.5    # obstacle within this distance triggers brain
+TEMP_THRESHOLD_C = 40.0   # temperature above this triggers brain
+AUDIO_EVENT_DB = 70.0      # audio above this triggers brain
+
+_last_brain_call_ts = 0.0
+_last_pose = (0.0, 0.0, 0.0)
 
 
 def _perceive(state: RobotState) -> RobotState:
@@ -179,10 +191,62 @@ def _update_map(state: RobotState, mapper, pose_estimator, transcript_buffer=Non
         mapper.add_annotation(pose, state.scene_description, "gemini")
 
 
+def _should_call_brain(state: RobotState, transcript_buffer) -> tuple[bool, str]:
+    """Check if an event warrants a Backboard brain call. Returns (should_call, reason)."""
+    global _last_brain_call_ts, _last_pose
+    now = time.time()
+
+    # Event 1: new transcript (someone spoke)
+    if state.last_user_command:
+        return True, "voice command received"
+
+    # Event 2: check transcripts buffer for new final transcripts
+    if transcript_buffer is not None:
+        text = transcript_buffer.consume_final()
+        if text:
+            state.last_user_command = text
+            logger.info("transcript -> last_user_command: %s", text)
+            db.log_transcript(text, final=True, utterance_id=0, pose=state.robot_pose)
+            return True, "new transcript"
+
+    # Event 3: obstacle detected close ahead
+    dets = get_latest_detections()
+    close = [d for d in dets if abs(d["bearing_deg"]) < 30 and d["distance_m"] < OBSTACLE_CLOSE_M]
+    if close:
+        return True, f"obstacle at {close[0]['distance_m']:.1f}m"
+
+    # Event 4: sensor threshold crossed
+    temp = sensors.read_temperature()
+    if temp["celsius"] >= TEMP_THRESHOLD_C:
+        return True, f"temperature {temp['celsius']}°C"
+
+    audio = sensors.read_audio()
+    if audio.get("db", 0) >= AUDIO_EVENT_DB or audio.get("event"):
+        return True, f"audio event: {audio.get('event', {}).get('kind', 'loud')}"
+
+    gyro = sensors.read_gyro()
+    if gyro.get("tipped") or gyro.get("bump"):
+        return True, f"gyro: tipped={gyro.get('tipped')}, bump={gyro.get('bump')}"
+
+    # Event 5: rover has moved significantly since last brain call
+    pose = state.robot_pose
+    moved = math.sqrt((pose[0] - _last_pose[0])**2 + (pose[1] - _last_pose[1])**2)
+    if moved > 2.0 and (now - _last_brain_call_ts) >= MIN_BRAIN_GAP_S:
+        return True, f"moved {moved:.1f}m, {now - _last_brain_call_ts:.0f}s since last call"
+
+    # Event 6: minimum time gap with no events (periodic check-in)
+    if (now - _last_brain_call_ts) >= MIN_BRAIN_GAP_S * 3:
+        return True, "periodic check-in (30s)"
+
+    return False, "no event"
+
+
 def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
                 transcript_buffer=None) -> RobotState:
+    global _last_brain_call_ts, _last_pose
     state = _perceive(state)
 
+    # Check for new transcripts (always, even if brain doesn't call)
     if transcript_buffer is not None and not state.last_user_command:
         text = transcript_buffer.consume_final()
         if text:
@@ -191,7 +255,7 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
             db.log_transcript(text, final=True, utterance_id=0, pose=state.robot_pose)
 
     # Fast path: try the Baseten fine-tuned parser for simple voice commands.
-    # Falls through to the Backboard brain for complex/unrecognized commands.
+    # Always active — no rate limiting on the parser.
     if state.last_user_command:
         parsed = command_parser.parse(state.last_user_command)
         if parsed is not None:
@@ -201,6 +265,16 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
             _update_map(state, mapper, pose_estimator, transcript_buffer)
             return state
 
+    # Event-driven brain: only call Backboard when something significant happens
+    should_call, reason = _should_call_brain(state, transcript_buffer)
+
+    if not should_call:
+        # No event — just update the map and return
+        _update_map(state, mapper, pose_estimator, transcript_buffer)
+        return state
+
+    logger.info("brain call triggered: %s", reason)
+
     def execute_tool(name: str, args: dict) -> dict:
         return _execute_verb(name, args, state, arbiter, mapper)
 
@@ -208,7 +282,8 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
         f"Scene: {state.scene_description}\n"
         f"Current goal: {state.current_goal}\n"
         f"User command: {state.last_user_command}\n"
-        f"Pose: {state.robot_pose}"
+        f"Pose: {state.robot_pose}\n"
+        f"Trigger: {reason}"
     )
     state.last_user_command = None  # consume it -- act on a spoken command exactly once
 
@@ -219,6 +294,9 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
         execute_tool=execute_tool,
         memory="Auto",
     )
+
+    _last_brain_call_ts = time.time()
+    _last_pose = state.robot_pose
 
     _update_map(state, mapper, pose_estimator, transcript_buffer)
     return state
