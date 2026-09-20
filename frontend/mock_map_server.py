@@ -27,7 +27,7 @@ GW = int(GRID_SIZE_M / RES)  # 100
 GH = GW
 STREAM_HZ = 5
 
-# ── build a static obstacle field ─────────────────────────────────────────
+# ── build obstacle field matching DrivingView3D buildings ──────────────────
 # 0.5 = unknown, 0.0 = free, 1.0 = occupied
 grid = [0.5] * (GW * GH)
 
@@ -42,6 +42,26 @@ def world_to_grid(x: float, y: float) -> tuple[int, int]:
     return int((x + half) / RES), int((y + half) / RES)
 
 
+def fill_rect(cx: float, cy: float, w: float, h: float, val: float = 0.9) -> None:
+    """Fill a rectangular region in the grid centered at (cx, cy) with size (w, h)."""
+    for row in range(GH):
+        for col in range(GW):
+            wx = (col - GW / 2) * RES
+            wy = (GH / 2 - row) * RES
+            if abs(wx - cx) < w / 2 and abs(wy - cy) < h / 2:
+                set_cell(col, row, val)
+
+
+def fill_circle(cx: float, cy: float, r: float, val: float = 0.85) -> None:
+    """Fill a circular region in the grid centered at (cx, cy) with radius r."""
+    for row in range(GH):
+        for col in range(GW):
+            wx = (col - GW / 2) * RES
+            wy = (GH / 2 - row) * RES
+            if math.hypot(wx - cx, wy - cy) < r:
+                set_cell(col, row, val)
+
+
 # border walls
 for i in range(GW):
     set_cell(i, 0, 0.95)
@@ -49,32 +69,28 @@ for i in range(GW):
     set_cell(0, i, 0.95)
     set_cell(GW - 1, i, 0.95)
 
-# interior wall 1 (horizontal)
-for i in range(20, 60):
-    set_cell(i, 35, 0.92)
-# gap in the wall
-for i in range(38, 42):
-    set_cell(i, 35, 0.1)
+# Buildings (matching DrivingView3D positions)
+fill_rect(4, -3, 2, 2)       # building [4, -3]
+fill_rect(-3, -5, 1.5, 1.5)  # building [-3, -5]
+fill_rect(6, 2, 2.5, 2.5)    # building [6, 2]
+fill_rect(-5, 3, 1.8, 1.8)   # building [-5, 3]
+fill_rect(2, -7, 2, 2)       # building [2, -7]
+fill_rect(-6, -1, 1.2, 1.2)  # building [-6, -1]
 
-# interior wall 2 (vertical)
-for i in range(50, 80):
-    set_cell(65, i, 0.93)
-for i in range(60, 66):
-    set_cell(65, i, 0.1)
+# Walls
+fill_rect(0, 5, 4, 0.2)     # wall [0, 5]
+fill_rect(-7, -3, 0.2, 4)    # wall [-7, -3]
 
-# scattered debris clumps
-for cx, cy, r in [
-    (-6, 3, 2), (5, -5, 3), (-3, -6, 2), (7, 6, 2), (2, 7, 1),
-]:
-    for row in range(GH):
-        for col in range(GW):
-            wx = (col - GW / 2) * RES
-            wy = (GH / 2 - row) * RES
-            if math.hypot(wx - cx, wy - cy) < r * 0.6:
-                set_cell(col, row, 0.88)
-            elif math.hypot(wx - cx, wy - cy) < r:
-                if grid[row * GW + col] == 0.5:
-                    set_cell(col, row, 0.15)
+# Rubble piles (matching DrivingView3D)
+fill_circle(1, 2, 0.6)
+fill_circle(-2, -3, 0.8)
+fill_circle(5, -1, 0.6)
+fill_circle(-4, 4, 0.5)
+
+# Trees (small obstacles)
+fill_circle(-8, 6, 0.3)
+fill_circle(8, -5, 0.3)
+fill_circle(-2, 7, 0.3)
 
 # clear a corridor near origin
 for row in range(45, 56):
@@ -89,18 +105,18 @@ sound_sources = [
 ]
 
 heat_points = [
-    {"x": -4.0, "y": -5.5, "celsius": 68.0, "status": "overheat"},
-    {"x": 5.5, "y": 5.0, "celsius": 42.0, "status": "warm"},
+    {"x": 4.0, "y": -3.0, "celsius": 68.0, "status": "overheat"},
+    {"x": -5.0, "y": 3.0, "celsius": 42.0, "status": "warm"},
 ]
 
 hazards = [
-    {"x": -2.0, "y": 1.0, "type": "bump"},
-    {"x": 4.0, "y": -2.5, "type": "tipped"},
+    {"x": -2.0, "y": -3.0, "type": "bump"},
+    {"x": 5.0, "y": -1.0, "type": "tipped"},
 ]
 
 annotations = [
     {"x": -5.5, "y": 3.5, "text": "Survivor detected", "source": "gemini"},
-    {"x": 0.5, "y": -6.0, "text": "Debris field", "source": "gemini"},
+    {"x": 1.0, "y": 2.0, "text": "Debris field", "source": "gemini"},
 ]
 
 
