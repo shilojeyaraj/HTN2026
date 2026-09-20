@@ -1,24 +1,26 @@
-"""The brain's fixed verb set: bounded, self-completing motion primitives (CLAUDE.md
-section 6). Keep this schema small and stable so the fixed prompt prefix stays cacheable.
-"""
+"""The planner's bounded RoboMaster action and observation vocabulary."""
+
+
+def _distance_tool(name: str, description: str) -> dict:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": {"distance_m": {"type": "number"}},
+                "required": ["distance_m"],
+            },
+        },
+    }
+
 
 VERBS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "forward",
-            "description": "Drive forward distance_m meters, then stop. Returns 'completed' or 'stopped_by_obstacle'.",
-            "parameters": {"type": "object", "properties": {"distance_m": {"type": "number"}}, "required": ["distance_m"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "backward",
-            "description": "Drive backward distance_m meters, then stop.",
-            "parameters": {"type": "object", "properties": {"distance_m": {"type": "number"}}, "required": ["distance_m"]},
-        },
-    },
+    _distance_tool("forward", "Drive forward distance_m metres, then stop."),
+    _distance_tool("backward", "Drive backward distance_m metres, then stop."),
+    _distance_tool("strafe_left", "Drive left distance_m metres, then stop."),
+    _distance_tool("strafe_right", "Drive right distance_m metres, then stop."),
     {
         "type": "function",
         "function": {
@@ -43,7 +45,7 @@ VERBS = [
         "type": "function",
         "function": {
             "name": "get_obstacles",
-            "description": "Read the latest on-camera obstacle detections without moving.",
+            "description": "Read raw RoboMaster ToF sensor values in millimetres. Values have no inferred bearings.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -51,79 +53,7 @@ VERBS = [
         "type": "function",
         "function": {
             "name": "get_state",
-            "description": "Read the robot's current pose, velocity, and goal without moving.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_temperature",
-            "description": "Read the ambient temperature sensor. Returns celsius and status (ok/warm/overheat). Useful for detecting fire or hazardous heat.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_audio",
-            "description": "Read the microphone for ambient sound level and detected audio events. Events include distress (screams, calls for help), sound (hazard noise like rubble or creaking), and voice (operator commands). Returns dB level and event details if something was detected.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_gyro",
-            "description": "Read the IMU/gyroscope for tilt, impact, and orientation. Returns pitch, roll, vertical acceleration, tipped (bool), and bump (bool). Use to detect if the robot has been picked up, flipped, or bumped into something.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "look_around",
-            "description": "Call the vision agent to describe the current scene. Use when you need to re-examine your surroundings after moving or when you want a fresh visual assessment.",
-            "parameters": {"type": "object", "properties": {}},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_map",
-            "description": "Query the occupancy map for nearby obstacles, sounds, heat sources, hazards, and annotations within a radius. Use to understand what's around you and where to explore next.",
-            "parameters": {"type": "object", "properties": {"radius_m": {"type": "number", "description": "Search radius in meters (default 3.0)"}}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "check_safety",
-            "description": "Ask the safety agent to vet a proposed action before executing it. Returns OK or VETO with a reason. Use before risky moves like driving forward when unsure.",
-            "parameters": {"type": "object", "properties": {"action": {"type": "string", "description": "The action to vet (e.g. 'forward', 'backward', 'turn')"}, "distance_m": {"type": "number"}}, "required": ["action"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_knowledge",
-            "description": "Search the rescue protocol knowledge base and past mission memory for relevant information. Use when you encounter a hazard, find a survivor, or need guidance on how to handle a situation.",
-            "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "What to search for (e.g. 'thermal hazard approach', 'victim communication', 'structural collapse')"}}, "required": ["query"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "log_finding",
-            "description": "Record a mission finding in persistent memory. Use when you discover a survivor, identify a hazard, or note something important for the mission record.",
-            "parameters": {"type": "object", "properties": {"finding_type": {"type": "string", "description": "Category: survivor, hazard, area_explored, or other"}, "description": {"type": "string", "description": "What was found, including location details and condition"}}, "required": ["finding_type", "description"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "analyze_patterns",
-            "description": "Analyze patterns across all stored mission memory and past encounters. Returns insights about rescue success rates, location patterns, and duration trends. Use when planning strategy or deciding which areas to prioritize.",
+            "description": "Read received RoboMaster chassis telemetry and the current goal without moving.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -133,29 +63,12 @@ SYSTEM_PROMPT = """You are a rescue rover: a small autonomous robot that explore
 or hard-to-reach spaces to look for people and report what you find. You receive a scene \
 description, the current goal, and any spoken command from someone nearby.
 
-Move by calling forward/backward/turn in small bounded steps; check progress with \
-get_obstacles/get_state. Each movement verb reports back whether it completed or stopped \
-early due to an obstacle -- use that to decide your next call. Never invent motor \
+Move by calling forward/backward/strafe_left/strafe_right/turn in small bounded steps. \
+Use get_state for real chassis telemetry. get_obstacles returns raw ToF readings only; do \
+not invent their direction or treat an absent reading as clear space. Never invent motor \
 commands outside the provided tools.
-
-You have environmental sensors: get_temperature (detect fire or hazardous heat), \
-get_audio (listen for distress calls, hazard noise, or operator voices), and get_gyro \
-(detect tipping, impacts, or being picked up). Poll these when the situation calls for it \
--- a survivor may be calling for help that only the microphone can hear, or a hot spot \
-may only be detectable by the temperature sensor.
 
 Use speak() the way a real rescue responder would: calm, clear, reassuring, brief. \
 Narrate what matters as you find it -- a hazard, an obstacle, a person -- don't stay \
 silent through something worth reporting. If a spoken command is present, treat it as a \
-person you can hear talking to you: acknowledge it and respond directly, then act on it.
-
-You have a rescue protocol knowledge base and 8 past encounter records. When you \
-encounter a hazard, find a survivor, or face an unfamiliar situation, call \
-search_knowledge() to retrieve relevant protocols and past mission findings — \
-including historical encounters from previous rescue missions. Log every important \
-discovery with log_finding() so the mission record stays current. Use check_map() \
-to understand your surroundings before deciding where to go next, and look_around() \
-when you need a fresh visual assessment after moving. Use check_safety() before \
-risky moves when you're unsure about obstacles. Call analyze_patterns() to learn \
-from past encounters — it analyzes rescue success rates, location patterns, and \
-duration trends across all stored mission memory."""
+person you can hear talking to you: acknowledge it and respond directly, then act on it."""

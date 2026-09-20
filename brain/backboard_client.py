@@ -54,8 +54,8 @@ class BackboardBrain:
         self.assistant_id = response.assistant_id
 
         # Inner Monologue (CLAUDE.md section 7): feed each verb's REAL execution result
-        # back to the model, not a trivial ack, so it can react (e.g. turn() after a
-        # forward() that stopped_by_obstacle) within this same episode. Capped so a
+        # back to the model, not a trivial ack, so it can react to a failed or completed
+        # command within this same episode. Capped so a
         # misbehaving chain can't loop forever.
         results = []
         rounds = 0
