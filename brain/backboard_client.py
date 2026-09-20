@@ -76,11 +76,15 @@ class BackboardBrain:
                 results.append({"name": call.function.name, "arguments": args, "result": result})
                 tool_outputs.append({"tool_call_id": call.id, "output": json.dumps(result)})
 
-            response = await self.client.submit_tool_outputs_simple(
-                thread_id=response.thread_id, tool_outputs=tool_outputs,
-            )
-            rounds += 1
-            logger.info("Inner Monologue round %d: status=%s", rounds, response.status)
+            try:
+                response = await self.client.submit_tool_outputs_simple(
+                    thread_id=response.thread_id, tool_outputs=tool_outputs,
+                )
+                rounds += 1
+                logger.info("Inner Monologue round %d: status=%s", rounds, response.status)
+            except Exception as e:
+                logger.warning("Inner Monologue round %d failed (timeout): %s — ending episode", rounds, e)
+                break
 
         return results
 

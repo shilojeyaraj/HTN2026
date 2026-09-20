@@ -467,7 +467,7 @@ async def run_brain_episode(command="search for survivors"):
     try:
         results = await brain._run_tools(
             content=user_content,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=SYSTEM_PROMPT + "\n\nIMPORTANT: You MUST call forward(distance_m) to actually move. Do not just say you are moving — call the forward tool. Always call forward(0.5) to explore, then check_map or get_obstacles to see what you found.",
             tools=VERBS,
             execute_tool=execute_tool,
             memory="Auto",
@@ -492,8 +492,9 @@ async def run_brain_episode(command="search for survivors"):
 
 
 async def brain_loop():
-    """Background loop that runs brain episodes with rate limiting."""
-    global brain_initialized
+    """Background loop that runs brain episodes with rate limiting.
+    Also auto-drives the rover between brain calls so the map builds up."""
+    global brain_initialized, last_brain_ts, last_pose
 
     # Initialize brain (RAG upload, encounters)
     logger.info("Initializing brain (RAG upload, encounters)...")
@@ -507,16 +508,40 @@ async def brain_loop():
     # First episode
     await run_brain_episode("search for survivors")
 
-    # Subsequent episodes — rate limited
+    # Subsequent episodes — rate limited + auto-explore
     while True:
-        await asyncio.sleep(5)
+        # Auto-drive: move rover forward between brain calls so the map builds up
+        auto_drive(rover, duration_s=3.0)
+
+        await asyncio.sleep(2)
         pose = rover.get_pose()
         moved = math.sqrt((pose[0] - last_pose[0])**2 + (pose[1] - last_pose[1])**2)
         elapsed = time.time() - last_brain_ts
 
-        # Trigger brain if: moved significantly, or 30s periodic
+        # Trigger brain if: moved significantly, victim spoke, or 30s periodic
         if moved > 1.0 or elapsed > 30:
             await run_brain_episode("continue searching")
+
+
+def auto_drive(rover, duration_s=3.0):
+    """Auto-drive the rover forward, turning away from obstacles.
+    This makes the map build up progressively even between brain calls."""
+    dt = 0.1
+    steps = int(duration_s / dt)
+    for _ in range(steps):
+        dets = rover.get_detections()
+        ahead = [d for d in dets if abs(d["bearing_deg"]) < 30 and d["distance_m"] < 0.8]
+        if ahead:
+            # Turn away from obstacle
+            left = [d for d in dets if d["bearing_deg"] > 0]
+            right = [d for d in dets if d["bearing_deg"] < 0]
+            turn_dir = -0.5 if len(right) >= len(left) else 0.5
+            rover.publish_cmd_vel(0.0, turn_dir)
+        else:
+            # Drive forward
+            rover.publish_cmd_vel(0.2, 0.0)
+        time.sleep(dt)
+    rover.publish_cmd_vel(0.0, 0.0)
 
 
 async def handler(websocket):
