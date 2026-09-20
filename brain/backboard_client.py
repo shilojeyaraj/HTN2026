@@ -25,7 +25,7 @@ MAX_RATE_LIMIT_RETRIES = 3
 
 
 class BackboardBrain:
-    def __init__(self, llm_provider: str, model_name: str, *, fallback_provider="openai", fallback_model="gpt-4.1-mini"):
+    def __init__(self, llm_provider: str, model_name: str, *, fallback_provider="openai", fallback_model=""):
         self.client = None
         self.llm_provider = llm_provider
         self.model_name = model_name
@@ -240,8 +240,8 @@ class BackboardBrain:
 # direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
 # TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
 brain = BackboardBrain(
-    llm_provider=os.getenv("BACKBOARD_PROVIDER", "google"),
-    model_name=os.getenv("BACKBOARD_MODEL", "gemini-3.6-flash"),
+    llm_provider=os.getenv("BACKBOARD_PROVIDER", "openai"),
+    model_name=os.getenv("BACKBOARD_MODEL", "gpt-4.1"),
     fallback_provider=os.getenv("BACKBOARD_FALLBACK_PROVIDER", "openai"),
-    fallback_model=os.getenv("BACKBOARD_FALLBACK_MODEL", "gpt-4.1-mini"),
+    fallback_model=os.getenv("BACKBOARD_FALLBACK_MODEL", ""),
 )

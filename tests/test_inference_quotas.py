@@ -16,6 +16,7 @@ from control.robomaster import RoboMasterController
 from perception import vision
 from shared.inference import InferenceUnavailable, is_daily_quota, retry_delay
 from tests.test_tool_execution import response, tool_call
+from tests.test_vision import vision_response
 
 
 DAILY = "LLM Invocation Error: 429 RESOURCE_EXHAUSTED; GenerateRequestsPerDayPerProjectPerModel-FreeTier, limit: 20; retryDelay: 44s"
@@ -31,7 +32,9 @@ def failed(content):
 
 
 def planner_with(*responses, **kwargs):
-    planner = BackboardBrain("google", "gemini-3.6-flash", **kwargs)
+    # Optional fallbacks remain testable, but the live app doesn't enable one.
+    kwargs.setdefault("fallback_model", "test-fallback")
+    planner = BackboardBrain("openai", "gpt-4.1", **kwargs)
     planner.assistant_id = "assistant"
     planner.client = SimpleNamespace(send_message=AsyncMock(side_effect=responses))
     return planner
@@ -49,7 +52,7 @@ def test_daily_quota_switches_once_without_sleep_or_reexecuting_tools(monkeypatc
 
     asyncio.run(run())
     requests = planner.client.send_message.call_args_list
-    assert [r.kwargs["model_name"] for r in requests] == ["gemini-3.6-flash", "gpt-4.1-mini", "gpt-4.1-mini"]
+    assert [r.kwargs["model_name"] for r in requests] == ["gpt-4.1", "test-fallback", "test-fallback"]
     assert requests[0].kwargs["content"] == requests[1].kwargs["content"]
     assert requests[1].kwargs["thread_id"] == "thread"
     assert all(r.kwargs["memory"] == "Auto" for r in requests)
@@ -110,7 +113,7 @@ def test_transient_retries_are_bounded_and_stay_in_one_planner_call(monkeypatch)
     asyncio.run(planner.run_tools("one scene", "prompt", [], Mock()))
     assert sleep.await_count == 3
     assert planner.client.send_message.await_count == 5
-    assert planner.model_name == "gpt-4.1-mini"
+    assert planner.model_name == "test-fallback"
     assert {r.kwargs["content"] for r in planner.client.send_message.call_args_list} == {"one scene"}
 
 
@@ -138,18 +141,17 @@ def test_continuation_rate_limit_replans_without_resubmitting_consumed_outputs(m
     assert camera.call_count == perceive.call_count == 2
     retry = planner.client.send_message.call_args.kwargs
     assert retry["thread_id"] == "thread"
-    assert retry["model_name"] == "gpt-4.1-mini"
+    assert retry["model_name"] == "test-fallback"
     assert "After turn" in retry["content"] and "Already processed tool results" in retry["content"]
     assert planner._pending_tool_outputs[0]["tool_call_id"] == "next"
 
 
 @pytest.fixture
 def vision_client(monkeypatch):
-    client = SimpleNamespace(models=SimpleNamespace(generate_content=Mock()), close=Mock())
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    client = SimpleNamespace(post=Mock(), close=Mock())
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(vision, "_client", client)
-    monkeypatch.setattr(vision, "_active_model", "gemini-3.6-flash")
-    monkeypatch.setattr(vision, "FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setattr(vision, "MODEL", "gpt-4.1")
     monkeypatch.setattr(vision, "MIN_INTERVAL_S", 0)
     monkeypatch.setattr(vision, "_next_request_at", 0)
     monkeypatch.setattr(vision, "_rate_limit_attempt", 0)
@@ -157,12 +159,12 @@ def vision_client(monkeypatch):
     return client
 
 
-def test_vision_daily_fallback_reuses_client_for_later_frames(vision_client):
-    generate = vision_client.models.generate_content
-    generate.side_effect = [RuntimeError(DAILY), SimpleNamespace(text="Clear floor"), SimpleNamespace(text="New scene")]
+def test_vision_reuses_gpt41_client_for_later_frames(vision_client):
+    generate = vision_client.post
+    generate.side_effect = [vision_response("Clear floor"), vision_response("New scene")]
     assert vision.describe_scene(b"first jpeg") == "Clear floor"
     assert vision.describe_scene(b"next jpeg") == "New scene"
-    assert [r.kwargs["model"] for r in generate.call_args_list] == ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite"]
+    assert [r.kwargs["json"]["model"] for r in generate.call_args_list] == ["gpt-4.1", "gpt-4.1"]
     vision_client.close.assert_not_called()
     vision.close_vision_client()
     vision_client.close.assert_called_once()
@@ -171,23 +173,41 @@ def test_vision_daily_fallback_reuses_client_for_later_frames(vision_client):
 def test_vision_cooldown_skips_requests_until_a_new_frame_can_be_read(vision_client, monkeypatch):
     clock = [100.0]
     monkeypatch.setattr(vision.time, "monotonic", lambda: clock[0])
-    generate = vision_client.models.generate_content
-    generate.side_effect = [RuntimeError(MINUTE), SimpleNamespace(text="Recovered scene")]
+    generate = vision_client.post
+    generate.side_effect = [httpx.Response(429, headers={"Retry-After": "44"},
+                                          request=httpx.Request("POST", "https://api.openai.com/v1/responses"),
+                                          json={"error": {"code": "rate_limit_exceeded"}}),
+                            vision_response("Recovered scene")]
     assert vision.describe_scene(b"old jpeg") is None
     assert vision.describe_scene(b"too soon") is None
     assert generate.call_count == 1
     clock[0] = 146
     assert vision.describe_scene(b"fresh jpeg") == "Recovered scene"
-    assert generate.call_args.kwargs["contents"][0].inline_data.data == b"fresh jpeg"
+    import base64
+    image_url = generate.call_args.kwargs["json"]["input"][0]["content"][1]["image_url"]
+    assert base64.b64decode(image_url.split(",", 1)[1]) == b"fresh jpeg"
+    assert all(r.kwargs["json"]["model"] == "gpt-4.1" for r in generate.call_args_list)
 
 
-def test_both_vision_quotas_exhausted_do_not_keep_calling_provider(vision_client):
-    generate = vision_client.models.generate_content
-    generate.side_effect = RuntimeError(DAILY)
+def test_vision_insufficient_quota_stops_without_switching_models(vision_client):
+    generate = vision_client.post
+    generate.return_value = httpx.Response(429, request=httpx.Request("POST", "https://api.openai.com/v1/responses"),
+                                           json={"error": {"code": "insufficient_quota"}})
     assert vision.describe_scene(b"jpeg") is None
     assert vision.describe_scene(b"jpeg") is None
-    assert generate.call_count == 2
-    assert "daily quota exhausted" in vision.vision_unavailable_reason()
+    assert generate.call_count == 1
+    assert "quota exhausted for gpt-4.1" in vision.vision_unavailable_reason()
+
+
+def test_gpt41_planner_defaults_to_no_model_switch():
+    planner = BackboardBrain("openai", "gpt-4.1")
+    planner.assistant_id = "assistant"
+    planner.client = SimpleNamespace(send_message=AsyncMock(return_value=failed("429 insufficient_quota")))
+    with pytest.raises(InferenceUnavailable):
+        asyncio.run(planner.run_tools("scene", "prompt", [], Mock()))
+    planner.client.send_message.assert_awaited_once()
+    assert planner.model_name == "gpt-4.1"
+    assert planner._fallback == ("openai", "")
 
 
 def test_mission_shutdown_stops_robot_and_closes_clients_on_exhaustion(monkeypatch):
