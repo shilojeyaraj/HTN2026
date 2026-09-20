@@ -10,32 +10,30 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 
 from backboard import BackboardClient
+from backboard.exceptions import BackboardAPIError
 
 from brain.tools import PHYSICAL_ACTIONS
+from shared.inference import InferenceUnavailable, is_daily_quota, is_rate_limited, retry_delay
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
 MAX_RATE_LIMIT_RETRIES = 3
-MAX_RETRY_BACKOFF_S = 8.0
-RETRY_DELAY_RE = re.compile(
-    r"(?:retry[_ ]?delay|retry\s+(?:in|after))\D*(\d+(?:\.\d+)?)\s*(ms|s|seconds)?",
-    re.IGNORECASE,
-)
 
 
 class BackboardBrain:
-    def __init__(self, llm_provider: str, model_name: str):
+    def __init__(self, llm_provider: str, model_name: str, *, fallback_provider="openai", fallback_model="gpt-4.1-mini"):
         self.client = None
         self.llm_provider = llm_provider
         self.model_name = model_name
         self.thread_id = None
         self.assistant_id = None
         self._pending_tool_outputs = None
+        self._fallback = (fallback_provider, fallback_model)
+        self._unavailable = None
 
     def _get_client(self) -> BackboardClient:
         if self.client is None:
@@ -56,22 +54,12 @@ class BackboardBrain:
     @classmethod
     def _is_llm_error(cls, response) -> bool:
         content = str(cls._message(response).get("content") or "").lower()
-        return any(marker in content for marker in ("llm invocation error", "resource_exhausted", "rate limit", "429"))
+        return response.status == "FAILED" or "llm invocation error" in content or is_rate_limited(content)
 
     @classmethod
     def _is_rate_limited(cls, response) -> bool:
         content = str(cls._message(response).get("content") or "").lower()
-        return "resource_exhausted" in content or "rate limit" in content or "429" in content
-
-    @staticmethod
-    def _retry_delay(content: str, attempt: int) -> float:
-        match = RETRY_DELAY_RE.search(content)
-        if match:
-            delay = float(match.group(1))
-            if (match.group(2) or "").lower() == "ms":
-                delay /= 1000
-            return max(delay, min(2 ** attempt, MAX_RETRY_BACKOFF_S))
-        return min(2 ** attempt, MAX_RETRY_BACKOFF_S)
+        return is_rate_limited(content)
 
     @classmethod
     def _log_response(cls, response, elapsed_s: float) -> None:
@@ -83,29 +71,75 @@ class BackboardBrain:
         logger.info("Backboard planner: tool calls=%d", len(tool_calls) if isinstance(tool_calls, list) else 0)
         logger.info("Backboard planner: retrieved memories=%d", len(retrieved_memories))
         logger.info("Backboard planner: llm_error=%s", cls._is_llm_error(response))
+        for call in tool_calls if isinstance(tool_calls, list) else []:
+            function = call.get("function") if isinstance(call, dict) else None
+            if isinstance(function, dict):
+                logger.info("Backboard planner: tool=%s args=%r", function.get("name"), function.get("arguments"))
 
-    async def _request_planner(self, content: str, system_prompt: str, tools: list[dict], memory: str):
-        thread_id, assistant_id = self.thread_id, self.assistant_id
-        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
-            logger.info("Backboard planner: request start model=%s", self.model_name)
+    async def _request_planner(self, content: str, system_prompt: str, tools: list[dict], memory: str, tool_outputs=None):
+        if self._unavailable:
+            raise InferenceUnavailable(self._unavailable)
+        attempt = 0
+        retry_content = content
+        if tool_outputs:
+            retry_content += "\nAlready processed tool results (do not repeat these actions):\n" + json.dumps(tool_outputs)
+        while True:
+            logger.info("Backboard planner: request start provider=%s model=%s%s", self.llm_provider, self.model_name,
+                        " (tool results)" if tool_outputs else "")
             started = time.monotonic()
-            response = await self._get_client().send_message(
-                content=content,
-                system_prompt=system_prompt,
-                llm_provider=self.llm_provider,
-                model_name=self.model_name,
-                tools=tools,
-                thread_id=thread_id,
-                assistant_id=assistant_id,
-                memory=memory,
-            )
-            self._log_response(response, time.monotonic() - started)
-            thread_id = response.thread_id or thread_id
-            assistant_id = response.assistant_id or assistant_id
-            if not self._is_rate_limited(response) or attempt == MAX_RATE_LIMIT_RETRIES:
-                self.thread_id, self.assistant_id = thread_id, assistant_id
-                return response
-            await asyncio.sleep(self._retry_delay(response.content or "", attempt))
+            retry_after = None
+            try:
+                if tool_outputs:
+                    response = await self._get_client().submit_tool_outputs_simple(
+                        thread_id=self.thread_id, tool_outputs=tool_outputs,
+                    )
+                else:
+                    response = await self._get_client().send_message(
+                        content=content, system_prompt=system_prompt,
+                        llm_provider=self.llm_provider, model_name=self.model_name,
+                        tools=tools, thread_id=self.thread_id,
+                        assistant_id=self.assistant_id, memory=memory,
+                    )
+                self._log_response(response, time.monotonic() - started)
+                self.thread_id = response.thread_id or self.thread_id
+                self.assistant_id = response.assistant_id or self.assistant_id
+                if not self._is_rate_limited(response):
+                    return response
+                error = response.content or ""
+                # HTTP 200 accepted the outputs; the provider failed afterwards.
+                # Retry inference as a message, never resubmit consumed tool IDs.
+                tool_outputs = None
+                content = retry_content
+            except BackboardAPIError as exc:
+                if exc.status_code != 429 and not is_rate_limited(exc):
+                    raise
+                error = str(exc)
+                if exc.response is not None:
+                    retry_after = exc.response.headers.get("Retry-After")
+                logger.warning("Backboard planner: rate limited: %s", error)
+
+            daily = is_daily_quota(error)
+            if daily or attempt >= MAX_RATE_LIMIT_RETRIES:
+                provider, model = self._fallback
+                if not tool_outputs and model and (self.llm_provider, self.model_name) != self._fallback:
+                    logger.warning("Backboard planner: %s for %s; switching to %s/%s for this session",
+                                   "daily quota exhausted" if daily else "retries exhausted",
+                                   self.model_name, provider, model)
+                    self.llm_provider, self.model_name = provider, model
+                    attempt = 0
+                    # A continuation cannot choose a model. Resume via send_message.
+                    tool_outputs = None
+                    content = retry_content
+                    continue
+                self._unavailable = (f"Planner quota unavailable for {self.model_name}. "
+                                     "Check provider billing/quota or configure BACKBOARD_MODEL and BACKBOARD_PROVIDER. "
+                                     "No further actions will execute.")
+                raise InferenceUnavailable(self._unavailable)
+            delay = retry_delay(error, attempt, retry_after)
+            logger.warning("Backboard planner: retry %d/%d in %.1fs; holding current scene/state, no action",
+                           attempt + 1, MAX_RATE_LIMIT_RETRIES, delay)
+            await asyncio.sleep(delay)
+            attempt += 1
 
     async def _run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str) -> list:
         await self._ensure_initialized()
@@ -116,7 +150,7 @@ class BackboardBrain:
             last_result = json.loads(outputs[-1]["output"])
             last_result["current_scene_and_state"] = content
             outputs[-1]["output"] = json.dumps(last_result)
-            response = await self._submit_results(outputs)
+            response = await self._request_planner(content, system_prompt, tools, memory, outputs)
             self._pending_tool_outputs = None
         else:
             response = await self._request_planner(content, system_prompt, tools, memory)
@@ -159,22 +193,11 @@ class BackboardBrain:
             if physical_attempted or rounds == MAX_TOOL_ROUNDS:
                 self._pending_tool_outputs = tool_outputs
                 return results
-            response = await self._submit_results(tool_outputs)
+            response = await self._request_planner(content, system_prompt, tools, memory, tool_outputs)
             if response.status == "FAILED" or self._is_llm_error(response):
                 return results
 
         return results
-
-    async def _submit_results(self, tool_outputs):
-        logger.info("Backboard planner: request start model=%s (tool results)", self.model_name)
-        started = time.monotonic()
-        response = await self._get_client().submit_tool_outputs_simple(
-            thread_id=self.thread_id, tool_outputs=tool_outputs,
-        )
-        self._log_response(response, time.monotonic() - started)
-        self.thread_id = response.thread_id or self.thread_id
-        self.assistant_id = response.assistant_id or self.assistant_id
-        return response
 
     async def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
         return await self._run_tools(content, system_prompt, tools, execute_tool, memory)
@@ -216,5 +239,9 @@ class BackboardBrain:
 # mission thread — that's what makes `memory="Auto"` and shared history useful. Voice is
 # direct (voice/tts.py = ElevenLabs, voice/stt.py = Baseten), not routed through here --
 # TTS reverted from Backboard-routed for testability (BUILD_PLAN.md).
-# VERIFY: current routable Gemini slug on Backboard (BUILD_PLAN.md section 4).
-brain = BackboardBrain(llm_provider="google", model_name="gemini-3.6-flash")
+brain = BackboardBrain(
+    llm_provider=os.getenv("BACKBOARD_PROVIDER", "google"),
+    model_name=os.getenv("BACKBOARD_MODEL", "gemini-3.6-flash"),
+    fallback_provider=os.getenv("BACKBOARD_FALLBACK_PROVIDER", "openai"),
+    fallback_model=os.getenv("BACKBOARD_FALLBACK_MODEL", "gpt-4.1-mini"),
+)

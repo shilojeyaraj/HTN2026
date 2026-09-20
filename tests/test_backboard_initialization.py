@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from brain import backboard_client
 from brain.backboard_client import BackboardBrain
+from shared.inference import retry_delay
 
 
 class FakeClient:
@@ -107,4 +108,4 @@ def test_rate_limit_retries_planning_without_executing_a_tool(monkeypatch):
     assert executed == []
     assert len(brain.client.requests) == 2
     assert brain.client.requests[1]["thread_id"] == "thread"
-    assert BackboardBrain._retry_delay("retryDelay: 2.5s", 0) == 2.5
+    assert retry_delay("retryDelay: 44.5s", 0) == 45.5
