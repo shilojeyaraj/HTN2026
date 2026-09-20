@@ -6,9 +6,11 @@ SDK verified against backboard-sdk v1.5.19:
 - call.function.arguments is a JSON string (not parsed_arguments)
 """
 
+import asyncio
 import json
 import logging
 import os
+import re
 import time
 
 from backboard import BackboardClient
@@ -16,17 +18,12 @@ from backboard import BackboardClient
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
-
-ENCOUNTERS = [
-    {"id": "ENC-2026-0147", "status": "RESCUED", "sector": "7-A", "location": "Sector 7-A, Riverside Apartments, Block A", "duration": "42 minutes", "location_type": "residential"},
-    {"id": "ENC-2026-0146", "status": "LOCATED", "sector": "4-C", "location": "Sector 4-C, Harbor Warehouse 12", "duration": "27 minutes", "location_type": "industrial"},
-    {"id": "ENC-2026-0145", "status": "NO CONTACT", "sector": "2-D", "location": "Sector 2-D, Old Mill Road, Residential", "duration": "11 minutes", "location_type": "residential"},
-    {"id": "ENC-2026-0144", "status": "RESCUED", "sector": "9-F", "location": "Sector 9-F, Northgate Transit Tunnel", "duration": "65 minutes", "location_type": "transit"},
-    {"id": "ENC-2026-0143", "status": "LOCATED", "sector": "5-B", "location": "Sector 5-B, Grainview School, Gymnasium", "duration": "33 minutes", "location_type": "public"},
-    {"id": "ENC-2026-0142", "status": "RESCUED", "sector": "1-A", "location": "Sector 1-A, Civic Center Parking Deck", "duration": "51 minutes", "location_type": "parking"},
-    {"id": "ENC-2026-0141", "status": "NO CONTACT", "sector": "3-E", "location": "Sector 3-E, Lakeside Trailer Park", "duration": "9 minutes", "location_type": "residential"},
-    {"id": "ENC-2026-0140", "status": "RESCUED", "sector": "6-C", "location": "Sector 6-C, Fairmount Hospital, East Wing", "duration": "83 minutes", "location_type": "medical"},
-]
+MAX_RATE_LIMIT_RETRIES = 3
+MAX_RETRY_BACKOFF_S = 8.0
+RETRY_DELAY_RE = re.compile(
+    r"(?:retry[_ ]?delay|retry\s+(?:in|after))\D*(\d+(?:\.\d+)?)\s*(ms|s|seconds)?",
+    re.IGNORECASE,
+)
 
 
 class BackboardBrain:
@@ -37,7 +34,6 @@ class BackboardBrain:
         self.thread_id = None
         self.assistant_id = None
         self._knowledge_uploaded = False
-        self._encounters_loaded = False
 
     def _get_client(self) -> BackboardClient:
         if self.client is None:
@@ -51,35 +47,69 @@ class BackboardBrain:
             await client.aclose()
 
     @staticmethod
-    def _log_response(label: str, response, elapsed_s: float) -> None:
-        logger.info("Backboard planner: %s %s in %.2fs", label, response.status, elapsed_s)
-        if response.status == "FAILED":
-            try:
-                payload = response.model_dump(mode="json")
-            except Exception:
-                payload = repr(response)
-            logger.error(
-                "Backboard planner: %s failed; parsed response type=%s payload=%s",
-                label, type(response).__name__, payload,
+    def _message(response) -> dict:
+        messages = getattr(response, "messages", None) or []
+        return messages[-1] if messages else {}
+
+    @classmethod
+    def _is_llm_error(cls, response) -> bool:
+        content = str(cls._message(response).get("content") or "").lower()
+        return any(marker in content for marker in ("llm invocation error", "resource_exhausted", "rate limit", "429"))
+
+    @classmethod
+    def _is_rate_limited(cls, response) -> bool:
+        content = str(cls._message(response).get("content") or "").lower()
+        return "resource_exhausted" in content or "rate limit" in content or "429" in content
+
+    @staticmethod
+    def _retry_delay(content: str, attempt: int) -> float:
+        match = RETRY_DELAY_RE.search(content)
+        if match:
+            delay = float(match.group(1))
+            if (match.group(2) or "").lower() == "ms":
+                delay /= 1000
+            return max(delay, min(2 ** attempt, MAX_RETRY_BACKOFF_S))
+        return min(2 ** attempt, MAX_RETRY_BACKOFF_S)
+
+    @classmethod
+    def _log_response(cls, response, elapsed_s: float) -> None:
+        message = cls._message(response)
+        tool_calls = message.get("tool_calls") or []
+        retrieved_memories = message.get("retrieved_memories") or []
+        logger.info("Backboard planner: response latency=%.2fs", elapsed_s)
+        logger.info("Backboard planner: assistant content=%s", message.get("content"))
+        logger.info("Backboard planner: tool calls=%d", len(tool_calls))
+        logger.info("Backboard planner: retrieved memories=%d", len(retrieved_memories))
+        logger.info("Backboard planner: llm_error=%s", cls._is_llm_error(response))
+
+    async def _request_planner(self, content: str, system_prompt: str, tools: list[dict], memory: str):
+        thread_id, assistant_id = self.thread_id, self.assistant_id
+        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+            logger.info("Backboard planner: request start model=%s", self.model_name)
+            started = time.monotonic()
+            response = await self._get_client().send_message(
+                content=content,
+                system_prompt=system_prompt,
+                llm_provider=self.llm_provider,
+                model_name=self.model_name,
+                tools=tools,
+                thread_id=thread_id,
+                assistant_id=assistant_id,
+                memory=memory,
             )
+            self._log_response(response, time.monotonic() - started)
+            thread_id = response.thread_id or thread_id
+            assistant_id = response.assistant_id or assistant_id
+            if not self._is_rate_limited(response) or attempt == MAX_RATE_LIMIT_RETRIES:
+                self.thread_id, self.assistant_id = thread_id, assistant_id
+                return response
+            await asyncio.sleep(self._retry_delay(response.content or "", attempt))
 
     async def _run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str) -> list:
         await self._ensure_initialized()
-        logger.info("Backboard planner: sending request to %s/%s", self.llm_provider, self.model_name)
-        started = time.monotonic()
-        response = await self._get_client().send_message(
-            content=content,
-            system_prompt=system_prompt,
-            llm_provider=self.llm_provider,
-            model_name=self.model_name,
-            tools=tools,
-            thread_id=self.thread_id,
-            assistant_id=self.assistant_id,
-            memory=memory,
-        )
-        self._log_response("response", response, time.monotonic() - started)
-        self.thread_id = response.thread_id
-        self.assistant_id = response.assistant_id
+        response = await self._request_planner(content, system_prompt, tools, memory)
+        if response.status == "FAILED" or self._is_llm_error(response):
+            return []
 
         # Inner Monologue (CLAUDE.md section 7): feed each verb's REAL execution result
         # back to the model, not a trivial ack, so it can react to a failed or completed
@@ -93,16 +123,16 @@ class BackboardBrain:
                 args = json.loads(call.function.arguments)
                 logger.info("Backboard planner: executing %s(%s)", call.function.name, args)
                 result = execute_tool(call.function.name, args)
-                logger.info("Backboard planner: %s returned %s", call.function.name, result)
                 results.append({"name": call.function.name, "arguments": args, "result": result})
                 tool_outputs.append({"tool_call_id": call.id, "output": json.dumps(result)})
 
-            logger.info("Backboard planner: submitting %d tool result(s)", len(tool_outputs))
             started = time.monotonic()
             response = await self._get_client().submit_tool_outputs_simple(
                 thread_id=response.thread_id, tool_outputs=tool_outputs,
             )
-            self._log_response("follow-up response", response, time.monotonic() - started)
+            self._log_response(response, time.monotonic() - started)
+            if response.status == "FAILED" or self._is_llm_error(response):
+                return results
             rounds += 1
 
         return results
@@ -114,13 +144,11 @@ class BackboardBrain:
         """Create static assistant data without waiting for document indexing."""
         client = self._get_client()
         if self.assistant_id is None:
-            logger.info("Backboard planner: creating assistant")
             assistant = await client.create_assistant(name="rescue-rover-brain")
             self.assistant_id = assistant.assistant_id
         if not self._knowledge_uploaded:
-            logger.info("Backboard planner: uploading knowledge base")
             kb_dir = os.path.join(os.path.dirname(__file__), "..", "knowledge")
-            for doc in ["rescue_protocols.md", "encounter_history.md"]:
+            for doc in ["rescue_protocols.md"]:
                 path = os.path.join(kb_dir, doc)
                 if os.path.exists(path):
                     try:
@@ -128,19 +156,6 @@ class BackboardBrain:
                     except Exception:
                         pass
             self._knowledge_uploaded = True
-            logger.info("Backboard planner: static knowledge upload submitted; indexing continues asynchronously")
-        if not self._encounters_loaded:
-            logger.info("Backboard planner: loading encounter memory")
-            for enc in ENCOUNTERS:
-                try:
-                    await client.add_memory(
-                        self.assistant_id,
-                        f"{enc['id']}: {enc['status']} at {enc['location']}. Duration: {enc['duration']}.",
-                        metadata={"type": "encounter", "encounter_id": enc["id"], "sector": enc["sector"], "status": enc["status"]},
-                    )
-                except Exception:
-                    pass
-            self._encounters_loaded = True
 
     async def _search_memory(self, query: str) -> dict:
         await self._ensure_initialized()
