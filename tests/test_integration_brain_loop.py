@@ -36,7 +36,7 @@ def test_run_episode_with_fake_robomaster():
     from brain.state import RobotState
 
     state = RobotState(
-        current_goal=(3.5, 2.5),
+        current_goal="Explore the room and report hazards.",
         last_user_command="move forward and explore the area",
     )
     with patch("brain.loop.get_latest_frame", return_value=b"jpeg"), \
