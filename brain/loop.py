@@ -86,6 +86,10 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             state.last_user_command = None
             return state
 
+    if not state.scene_fresh:
+        logger.warning("episode: waiting for valid vision; skipping planner and movement")
+        return state
+
     user_content = json.dumps(
         {
             "scene_description": state.scene_description,

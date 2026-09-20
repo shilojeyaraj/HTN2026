@@ -12,7 +12,8 @@ from brain.loop import run_episode
 from brain.backboard_client import brain
 from brain.state import RobotState
 from control.robomaster import RoboMasterController
-from perception.vision import close_vision_client
+from perception.vision import close_vision_client, vision_retry_delay, vision_unavailable_reason
+from shared.inference import InferenceUnavailable
 
 EPISODE_GAP_S = 1.0
 
@@ -29,9 +30,17 @@ async def main() -> None:
     state = RobotState(current_goal=args.goal)
     try:
         with RoboMasterController() as controller:
-            while True:
-                state = await run_episode(state, controller)
-                await asyncio.sleep(EPISODE_GAP_S)
+            try:
+                while True:
+                    state = await run_episode(state, controller)
+                    if reason := vision_unavailable_reason():
+                        raise InferenceUnavailable(reason)
+                    delay = max(EPISODE_GAP_S, vision_retry_delay())
+                    logging.getLogger(__name__).info("episode: next camera cycle in %.1fs", delay)
+                    await asyncio.sleep(delay)
+            except InferenceUnavailable as exc:
+                logging.getLogger(__name__).error("Mission stopped: %s", exc)
+                controller.stop()
     finally:
         try:
             await brain.aclose()

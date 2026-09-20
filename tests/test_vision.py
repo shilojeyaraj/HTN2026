@@ -39,6 +39,8 @@ def test_describe_scene_sends_jpeg_to_gemini(monkeypatch):
     monkeypatch.setitem(sys.modules, "google.genai.types", types_module)
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(vision, "_client", None)
+    monkeypatch.setattr(vision, "MIN_INTERVAL_S", 0)
+    monkeypatch.setattr(vision, "_next_request_at", 0)
 
     assert vision.describe_scene(b"jpeg") == "Clear floor ahead."
     assert vision.describe_scene(b"jpeg") == "Clear floor ahead."

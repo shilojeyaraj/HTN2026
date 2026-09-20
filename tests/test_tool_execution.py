@@ -207,7 +207,11 @@ def test_failed_perception_cannot_authorize_a_second_movement(monkeypatch):
 
     asyncio.run(two_cycles())
     controller.forward.assert_not_called()
-    assert state.last_action_result["result"]["status"] == "rejected"
+    assert state.last_action_result["name"] == "turn"
+    assert state.last_action_result["result"]["status"] == "completed"
+    planner.client.send_message.assert_awaited_once()
+    planner.client.submit_tool_outputs_simple.assert_not_awaited()
+    assert planner._pending_tool_outputs  # Submit only after vision recovers.
     assert not state.scene_fresh
 
 
