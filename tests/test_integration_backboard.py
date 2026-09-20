@@ -21,10 +21,10 @@ pytestmark = [
 def test_backboard_text_and_tool_roundtrip():
     async def check():
         planner = BackboardBrain(
-            os.getenv("BACKBOARD_PROVIDER", "openai"),
-            os.getenv("BACKBOARD_MODEL", "gpt-4.1"),
+            os.getenv("BACKBOARD_PROVIDER", "google"),
+            os.getenv("BACKBOARD_MODEL", "gemini-3.6-flash"),
             fallback_provider=os.getenv("BACKBOARD_FALLBACK_PROVIDER", "openai"),
-            fallback_model=os.getenv("BACKBOARD_FALLBACK_MODEL", ""),
+            fallback_model=os.getenv("BACKBOARD_FALLBACK_MODEL", "gpt-4.1-mini"),
         )
         try:
             await planner._ensure_initialized()

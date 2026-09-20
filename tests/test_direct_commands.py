@@ -62,7 +62,7 @@ def local_only(monkeypatch):
     for name in PHYSICAL_ACTIONS | {"stop"}:
         getattr(controller, name).return_value = {"status": "completed"}
     camera = Mock(side_effect=AssertionError("direct mode must not capture a frame"))
-    vision = Mock(side_effect=AssertionError("direct mode must not call vision inference"))
+    vision = Mock(side_effect=AssertionError("direct mode must not call Gemini"))
     planner = AsyncMock(side_effect=AssertionError("direct mode must not call Backboard"))
     monkeypatch.setattr(loop, "get_latest_frame", camera)
     monkeypatch.setattr(loop, "describe_scene", vision)

@@ -1,7 +1,7 @@
 -r laptop/requirements.txt
 
 backboard-sdk
-httpx
+google-genai
 elevenlabs
 requests
 python-dotenv
