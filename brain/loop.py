@@ -24,6 +24,7 @@ from control.telemetry import BrainActivity, SensorState, MissionInsights
 from perception import sensors
 from perception.camera import get_latest_detections, get_latest_frame
 from perception.vision import describe_scene
+from tracking import mongo as db
 from voice.tts import speak
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None
     if name == "speak":
         speak(args["text"])
         brain_activity.log_call(name, args, {"status": "completed"})
+        db.log_brain_call(name, args, {"status": "completed"}, state.robot_pose)
         return {"status": "completed"}
     if name == "look_around":
         try:
@@ -56,71 +58,90 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None
             state.scene_description = describe_scene(frame_jpeg, detections)
             result = {"scene": state.scene_description}
             brain_activity.log_call(name, args, result)
+            db.log_brain_call(name, args, result, state.robot_pose)
             return result
         except Exception:
             result = {"error": "vision unavailable", "scene": state.scene_description or "unknown"}
             brain_activity.log_call(name, args, result)
+            db.log_brain_call(name, args, result, state.robot_pose)
             return result
     if name == "check_map":
         if mapper is not None:
             result = mapper.nearby_summary(state.robot_pose, args.get("radius_m", 3.0))
             brain_activity.log_call(name, args, result)
+            db.log_brain_call(name, args, result, state.robot_pose)
             return result
         result = {"error": "map not available"}
         brain_activity.log_call(name, args, result)
+        db.log_brain_call(name, args, result, state.robot_pose)
         return result
     if name == "check_safety":
         result_val = safety.check(args["action"], args, get_latest_detections())
         result = {"status": result_val, "action": args["action"]}
         brain_activity.log_call(name, args, result)
+        db.log_brain_call(name, args, result, state.robot_pose)
         return result
     if name == "search_knowledge":
         result = brain.search_memory(args["query"])
         brain_activity.log_call(name, args, result or {"results": "no results"})
+        db.log_rag(args["query"], result or {"results": "no results"}, state.robot_pose)
+        db.log_brain_call(name, args, result or {"results": "no results"}, state.robot_pose)
         return result or {"results": "no results"}
     if name == "log_finding":
         result = brain.log_finding(args["finding_type"], args["description"])
         brain_activity.log_call(name, args, result or {"status": "logged"})
+        db.log_finding(args["finding_type"], args["description"], state.robot_pose)
+        db.log_brain_call(name, args, result or {"status": "logged"}, state.robot_pose)
         return result or {"status": "logged"}
     if name == "analyze_patterns":
         result = brain.get_insights()
         if result:
             mission_insights.update(result)
+            db.log_insights(result)
         brain_activity.log_call(name, args, result or {"insights": "no data"})
+        db.log_brain_call(name, args, result or {"insights": "no data"}, state.robot_pose)
         return result or {"insights": "no data"}
     if name == "get_obstacles":
         result = {"detections": get_latest_detections()}
         brain_activity.log_call(name, args, result)
+        db.log_brain_call(name, args, result, state.robot_pose)
         return result
     if name == "get_state":
         result = {"pose": state.robot_pose, "velocity": state.velocity, "goal": state.current_goal}
         brain_activity.log_call(name, args, result)
+        db.log_brain_call(name, args, result, state.robot_pose)
         return result
     if name == "get_temperature":
         temp = sensors.read_temperature()
         sensor_state.update_temperature(temp["celsius"], temp["status"])
         brain_activity.log_call(name, args, temp)
+        db.log_brain_call(name, args, temp, state.robot_pose)
+        db.log_sensor_reading(temp, sensors.read_audio(), sensors.read_gyro(), state.robot_pose)
         return temp
     if name == "get_audio":
         audio = sensors.read_audio()
         sensor_state.update_audio(audio.get("db", 0), audio.get("event"))
         brain_activity.log_call(name, args, audio)
+        db.log_brain_call(name, args, audio, state.robot_pose)
         return audio
     if name == "get_gyro":
         gyro = sensors.read_gyro()
         sensor_state.update_gyro(gyro.get("pitch_deg", 0), gyro.get("roll_deg", 0),
                                  gyro.get("tipped", False), gyro.get("bump", False))
         brain_activity.log_call(name, args, gyro)
+        db.log_brain_call(name, args, gyro, state.robot_pose)
         return gyro
 
     state.safety_status = safety.check(name, args, get_latest_detections())
     if state.safety_status == "VETO":
         result = {"status": "vetoed", "reason": "obstacle ahead"}
         brain_activity.log_call(name, args, result)
+        db.log_brain_call(name, args, result, state.robot_pose)
         return result
 
     result = execute_verb(name, args, arbiter, get_latest_detections)
     brain_activity.log_call(name, args, result)
+    db.log_brain_call(name, args, result, state.robot_pose)
     return result
 
 
@@ -167,6 +188,7 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
         if text:
             state.last_user_command = text
             logger.info("transcript -> last_user_command: %s", text)
+            db.log_transcript(text, final=True, utterance_id=0, pose=state.robot_pose)
 
     # Fast path: try the Baseten fine-tuned parser for simple voice commands.
     # Falls through to the Backboard brain for complex/unrecognized commands.
