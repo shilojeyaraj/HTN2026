@@ -486,7 +486,6 @@ async def run_brain_episode(command="search for survivors"):
         f"Current goal: search for survivors in hazardous area\n"
         f"User command: {command}\n"
         f"Pose: ({pose[0]:.1f}, {pose[1]:.1f}, {pose[2]:.0f}°)\n"
-        f"Trigger: {reason}\n"
         f"IMPORTANT: Call forward(0.5) to move, then call get_obstacles() or check_map() to scan, "
         f"then call speak() to report. Do NOT only call speak() — you MUST call forward() first to actually move."
     )
