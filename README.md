@@ -64,7 +64,13 @@ Planner arguments are validated before execution: distances are clamped to 0.05�
 
 The planner favors a meaningful translation (0.3–0.75 m) or turn (30–90°) for a far, obvious target with a visibly open path. Near targets, people, obstacles, or uncertain views call for finer translations (0.05–0.25 m) or turns (5–30°). Default chassis speeds are 0.7 m/s and 90°/s, configured by `DEFAULT_XY_SPEED_MPS` and `DEFAULT_Z_SPEED_DPS` in `control/robomaster.py`. Manual calls can still override speed; the physical smoke test retains its explicit slower 0.5 m/s translation default.
 
-`get_state` exposes only telemetry received from the RoboMaster chassis. `get_obstacles` exposes raw onboard ToF readings in millimetres, with no inferred bearing. Camera frames come from the RoboMaster stream at 360p and are retried when a transient read returns no frame.
+`get_state` exposes only telemetry received from the RoboMaster chassis. `get_obstacles` exposes raw onboard ToF readings in millimetres, with no inferred bearing.
+
+The camera runs in a background reader at `STREAM_360P`, continuously draining `read_cv2_image(strategy="pipeline")` into a single latest-frame slot. `controller.start_camera()` starts that reader once without waiting for SDK startup; the first `get_latest_frame()` also starts it if needed. Later reads immediately return a copy of the buffered frame. Direct commands don't start the camera. There are no per-cycle SDK reads, retries, or warmup sleeps in perception.
+
+`get_latest_frame()` returns `None` until a valid frame arrives and whenever its age exceeds `CAMERA_MAX_FRAME_AGE_S=1.0` in `control/robomaster.py`. The existing perception guard then skips vision, planning, and autonomous movement. A decode failure retains the last good frame without refreshing its timestamp. Short empty reads recover in the reader; two seconds without decoded frames or an invalid-data error triggers a stream restart there. Shutdown signals and joins the reader and stops the video stream. The standalone camera smoke test waits up to three seconds for its initial buffered frame.
+
+Camera logs and `controller.get_camera_state()` expose `frame_age_s`, `last_frame_monotonic_s`, `decode_fps` (frames received during the preceding second), `decode_failures`, `stream_restarts`, and `reader_alive`. Frame timestamps measure local receipt from the SDK, not a camera-provided exposure timestamp. `CAMERA_READ_TIMEOUT_S`, `CAMERA_RESTART_AFTER_S`, and `CAMERA_RESTART_DELAY_S` configure reader recovery independently of the planner.
 
 ### Inference quotas
 

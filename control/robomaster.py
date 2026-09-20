@@ -7,6 +7,9 @@ import math
 import queue
 import threading
 import time
+from collections import deque
+
+from av.error import InvalidDataError
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +20,11 @@ MAX_ROTATION_DEG = 180.0
 MAX_ARM_DELTA_MM = 80.0
 DEFAULT_GRIPPER_POWER = 25
 DEFAULT_GRIPPER_DWELL_S = 0.5
-CAMERA_WARMUP_S = 0.3
-CAMERA_RETRIES = 3
+CAMERA_READ_TIMEOUT_S = 0.25
+CAMERA_MAX_FRAME_AGE_S = 1.0
+CAMERA_RESTART_AFTER_S = 2.0
+CAMERA_RESTART_DELAY_S = 0.5
+CAMERA_SHUTDOWN_TIMEOUT_S = 5.0
 
 
 class RoboMasterError(RuntimeError):
@@ -43,8 +49,14 @@ class RoboMasterController:
         self._sensor = None
         self._robotic_arm = None
         self._gripper = None
-        self._camera_started = False
-        self._camera_start_attempted = False
+        self._camera_lock = threading.Lock()
+        self._camera_thread = None
+        self._camera_stop = threading.Event()
+        self._latest_frame = None
+        self._frame_received_at = None
+        self._decode_times = deque()
+        self._decode_failures = 0
+        self._stream_restarts = 0
         self._position_m = None
         self._attitude_deg = None
         self._velocity_mps = None
@@ -74,6 +86,11 @@ class RoboMasterController:
         with self._lock:
             if self._ep is not None:
                 return self
+            if self._camera_thread is not None:
+                if self._camera_thread.is_alive():
+                    raise RoboMasterError("previous camera reader is still shutting down")
+                self._camera_thread = None
+            self._camera_stop.clear()
             ep = None
             try:
                 if self._robot_factory is None:
@@ -303,49 +320,101 @@ class RoboMasterController:
         finally:
             self._pause_gripper_safely()
 
-    def _start_camera(self) -> bool:
+    def start_camera(self) -> None:
+        """Launch one reader; all video startup/decoding/recovery happens there."""
         with self._lock:
-            if self._camera_start_attempted:
-                return self._camera_started
-            self._camera_start_attempted = True
-            try:
-                self.camera.start_video_stream(
-                    display=False,
-                    resolution=self._camera_module.STREAM_360P,
-                )
-            except TypeError:
-                # Older SDK releases do not accept resolution but still provide 360p.
-                self.camera.start_video_stream(display=False)
-            self._camera_started = True
-            logger.info("RoboMaster camera stream started")
-        self._sleep(CAMERA_WARMUP_S)
-        return True
+            self._require_connected()
+            if self._camera_thread is not None:
+                if self._camera_stop.is_set():
+                    raise RoboMasterError("camera reader is still shutting down")
+                return
+            self._camera_stop.clear()
+            self._camera_thread = threading.Thread(
+                target=self._read_camera, args=(self.camera, self._camera_module.STREAM_360P),
+                name="robomaster-frame-reader", daemon=True,
+            )
+            self._camera_thread.start()
 
-    def get_latest_frame(self, *, retries: int = CAMERA_RETRIES, timeout: float = 1.0,
-                         strategy: str = "newest"):
-        """Return the newest OpenCV frame, or None after transient stream failures."""
-        if retries < 1 or timeout <= 0:
-            raise ValueError("retries and timeout must be positive")
-        try:
-            if not self._start_camera():
-                return None
-        except Exception:
-            logger.warning("RoboMaster camera startup failed", exc_info=True)
-            return None
-        for attempt in range(retries):
+    def _read_camera(self, camera, resolution) -> None:
+        """Continuously drain the SDK queue, retaining only the last valid frame."""
+        while not self._camera_stop.is_set():
             try:
-                frame = self.camera.read_cv2_image(timeout=timeout, strategy=strategy)
-            except queue.Empty:
-                logger.debug("RoboMaster camera queue empty (%d/%d)", attempt + 1, retries)
-                frame = None
+                if camera.start_video_stream(display=False, resolution=resolution) is False:
+                    raise RoboMasterError("camera stream startup rejected by SDK")
+                logger.info("RoboMaster camera stream started: resolution=%s strategy=pipeline", resolution)
+                last_received = time.monotonic()
+                while not self._camera_stop.is_set():
+                    try:
+                        frame = camera.read_cv2_image(timeout=CAMERA_READ_TIMEOUT_S, strategy="pipeline")
+                        if frame is None:
+                            raise queue.Empty()
+                        if not getattr(frame, "size", 0) or getattr(frame, "ndim", 0) != 3 or frame.shape[2] != 3:
+                            raise ValueError("camera returned an invalid BGR frame")
+                    except Exception as exc:
+                        with self._camera_lock:
+                            self._decode_failures += 1
+                        if self._camera_stop.is_set():
+                            break
+                        # A short gap can recover without restarting. A dead SDK
+                        # decoder manifests as repeated Empty even when PyAV's
+                        # InvalidDataError occurred on its own internal thread.
+                        if isinstance(exc, queue.Empty) and time.monotonic() - last_received < CAMERA_RESTART_AFTER_S:
+                            continue
+                        logger.warning("RoboMaster camera %s; restarting in reader thread: %s",
+                                       "invalid video data" if isinstance(exc, InvalidDataError) else type(exc).__name__, exc)
+                        break
+                    now = time.monotonic()
+                    with self._camera_lock:
+                        if self._camera_stop.is_set():
+                            break
+                        self._latest_frame, self._frame_received_at = frame, now
+                        self._decode_times.append(now)
+                        while self._decode_times and self._decode_times[0] < now - 1.0:
+                            self._decode_times.popleft()
+                    last_received = now
             except Exception:
-                logger.warning("RoboMaster camera read failed (%d/%d)", attempt + 1, retries, exc_info=True)
-                frame = None
-            if frame is not None:
-                return frame
-            if attempt + 1 < retries:
-                self._sleep(0.05)
-        return None
+                logger.warning("RoboMaster camera startup failed; retrying in reader thread", exc_info=True)
+            finally:
+                try:
+                    camera.stop_video_stream()
+                except Exception:
+                    logger.warning("RoboMaster camera stream cleanup failed", exc_info=True)
+            if self._camera_stop.wait(CAMERA_RESTART_DELAY_S):
+                break
+            with self._camera_lock:
+                self._stream_restarts += 1
+
+    def get_camera_state(self) -> dict:
+        """Reader telemetry; timestamps are local monotonic frame-receipt times."""
+        now = time.monotonic()
+        reader = self._camera_thread
+        with self._camera_lock:
+            return {
+                "last_frame_monotonic_s": self._frame_received_at,
+                "frame_age_s": None if self._frame_received_at is None else max(0.0, now - self._frame_received_at),
+                "decode_fps": sum(t >= now - 1.0 for t in self._decode_times),
+                "decode_failures": self._decode_failures,
+                "stream_restarts": self._stream_restarts,
+                "reader_alive": reader is not None and reader.is_alive(),
+            }
+
+    def get_latest_frame(self, *, max_age_s: float = CAMERA_MAX_FRAME_AGE_S):
+        """Immediately copy the latest valid frame, or return None if absent/stale.
+
+        The first request starts the reader asynchronously. SDK I/O never runs here.
+        """
+        if not math.isfinite(max_age_s) or max_age_s <= 0:
+            raise ValueError("max_age_s must be positive and finite")
+        if self._ep is None or self._camera_stop.is_set():
+            return None
+        if self._camera_thread is None:
+            self.start_camera()
+        with self._camera_lock:
+            frame, received_at = self._latest_frame, self._frame_received_at
+        logger.info("RoboMaster camera telemetry=%s", self.get_camera_state())
+        if received_at is None or time.monotonic() - received_at > max_age_s:
+            return None
+        return frame.copy()
 
     def _require_connected(self):
         if self._ep is None:
@@ -379,23 +448,26 @@ class RoboMasterController:
     def close(self) -> None:
         """Stop motion, stop video, unsubscribe telemetry, and release the SDK connection."""
         with self._lock:
-            ep, chassis, camera, sensor, gripper = (
-                self._ep, self._chassis, self._camera, self._sensor, self._gripper,
+            ep, chassis, sensor, gripper = (
+                self._ep, self._chassis, self._sensor, self._gripper,
             )
-            camera_started = self._camera_started
+            camera_thread = self._camera_thread
+            self._camera_stop.set()
             self._ep = self._chassis = self._camera = self._sensor = None
             self._robotic_arm = self._gripper = None
-            self._camera_started = False
-            self._camera_start_attempted = False
         if ep is None:
             return
         self._stop_safely(chassis)
         self._pause_gripper_safely(gripper)
-        if camera_started:
-            try:
-                camera.stop_video_stream()
-            except Exception:
-                logger.warning("RoboMaster camera shutdown failed", exc_info=True)
+        if camera_thread is not None:
+            camera_thread.join(timeout=CAMERA_SHUTDOWN_TIMEOUT_S)
+            if camera_thread.is_alive():
+                logger.warning("RoboMaster camera reader still stopping; closing SDK connection")
+            else:
+                self._camera_thread = None
+        with self._camera_lock:
+            self._latest_frame = self._frame_received_at = None
+            self._decode_times.clear()
         for source, name in (
             (chassis, "unsub_position"), (chassis, "unsub_attitude"),
             (chassis, "unsub_velocity"), (chassis, "unsub_status"),

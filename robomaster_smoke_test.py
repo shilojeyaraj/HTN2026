@@ -3,6 +3,7 @@
 import argparse
 import logging
 import math
+import time
 
 import cv2
 
@@ -50,6 +51,8 @@ def main() -> None:
     try:
         controller.connect()
         print("Connected to RoboMaster EP Core")
+        if not args.skip_camera:
+            controller.start_camera()
 
         if args.exercise_chassis:
             controller.forward(args.forward_m, xy_speed=args.xy_speed)
@@ -68,6 +71,11 @@ def main() -> None:
 
         if not args.skip_camera:
             frame = controller.get_latest_frame()
+            # Only this standalone diagnostic waits for its first buffered frame.
+            deadline = time.monotonic() + 3.0
+            while frame is None and time.monotonic() < deadline:
+                time.sleep(0.05)
+                frame = controller.get_latest_frame()
             if frame is None:
                 print("No camera frame received")
             elif cv2.imwrite(args.frame_path, frame):

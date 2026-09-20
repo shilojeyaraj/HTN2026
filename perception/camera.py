@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_latest_frame(controller: RoboMasterController) -> bytes | None:
-    """Read one current RoboMaster frame and encode it for the vision model."""
+    """JPEG-encode a fresh buffered frame; never wait on the SDK video decoder."""
     frame = controller.get_latest_frame()
     if frame is None:
         return None

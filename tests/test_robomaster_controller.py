@@ -1,4 +1,3 @@
-import queue
 from types import SimpleNamespace
 
 import pytest
@@ -294,50 +293,6 @@ def test_arm_and_gripper_commands_use_the_sdk_modules():
     assert ep.gripper.calls == [
         ("open", 25), ("pause", None), ("close", 25), ("pause", None),
     ]
-
-
-def test_camera_retries_queue_empty_then_returns_newest_frame_and_closes():
-    frame = object()
-    ep = EP(frames=[queue.Empty(), None, frame])
-    controller = make_controller(ep).connect()
-
-    assert controller.get_latest_frame() is frame
-    assert ep.camera.started == [{"display": False, "resolution": "360p"}]
-
-    assert controller.get_latest_frame(retries=1) is None
-    assert len(ep.camera.started) == 1
-
-    controller.close()
-    assert ep.camera.stopped
-    assert ep.closed
-
-
-def test_camera_falls_back_for_sdk_versions_without_a_resolution_argument():
-    class OldCamera(Camera):
-        def start_video_stream(self, *, display):
-            self.started.append({"display": display})
-
-    ep = EP()
-    ep.camera = OldCamera(["frame"])
-    controller = make_controller(ep).connect()
-
-    assert controller.get_latest_frame() == "frame"
-    assert ep.camera.started == [{"display": False}]
-
-
-def test_camera_start_failure_returns_none_without_retrying_startup():
-    class BrokenCamera(Camera):
-        def start_video_stream(self, **_kwargs):
-            self.started.append({"attempted": True})
-            raise RuntimeError("stream unavailable")
-
-    ep = EP()
-    ep.camera = BrokenCamera([])
-    controller = make_controller(ep).connect()
-
-    assert controller.get_latest_frame() is None
-    assert controller.get_latest_frame() is None
-    assert ep.camera.started == [{"attempted": True}]
 
 
 def test_telemetry_is_only_reported_after_sdk_callbacks_arrive():
