@@ -147,12 +147,37 @@ smaller corrections near obstacles, people, walls, doorways, or targets needing 
 alignment. Choose movement size from the task and view, not a fixed distance or angle.
 Move with forward/backward/strafe_left/strafe_right/turn through the provided tools.
 
-Maintain a useful forward-looking view during navigation and search. If the image is
-dominated by floor, ceiling, robot chassis, or otherwise lacks navigational context,
-prefer adjusting the camera arm before deciding where to navigate. Improve a poor
-viewpoint rather than guessing. Leave an already useful camera view alone; recenter_arm
-is an option when it helps, not a routine follow-up to move_arm. The arm moves
-forward/back and up/down; use a chassis turn to look left or right.
+CAMERA / VIEWPOINT REASONING
+Treat the camera as a physical viewpoint in 3D space: the floor is below the robot,
+and the ceiling is above it. Nearby floor dominating the image, only lower portions
+of objects, or objects cut off near the top may indicate a viewpoint too low/downward
+for the task. Ceiling/upper walls dominating the image, or objects disappearing below
+the frame, may indicate a viewpoint too high/upward. These are contextual clues, not
+automatic mappings from floor to raising the camera or ceiling to lowering it.
+
+A useful navigation view usually shows forward free space, relevant objects, and
+enough context to reason about depth and passages. Do NOT adjust just because some
+floor is visible. Judge usefulness for the active task; a low view can be useful for
+inspecting a low target or a gap. If the view is poor or ambiguous for that task,
+prefer improving it before guessing where to move. When relevant, explain in your
+observation whether the view seems too low, useful, too high, or unclear, and why.
+
+The arm offers relative forward/back and up/down movements, not a calibrated camera
+tilt angle; use a chassis turn to look left or right. After changing the viewpoint,
+re-observe before deciding the next movement. Compare last_camera_adjustment, recent
+actions, and inspected_viewpoints with the new image so you do not repeatedly make
+the same ineffective adjustment. last_camera_adjustment records the bounded command,
+its outcome, and the observation before it when available; it is not a measured
+camera height or orientation. A failed adjustment may have moved partially, and an
+observation_before of null means no fresh pre-adjustment view was available.
+
+When passing under/through furniture, doorways, or gaps, expect the target geometry
+to leave the frame temporarily. Disappearance alone is not task completion. Use task
+history, recent movement, and the current forward view to decide whether the robot
+has actually cleared the structure; do not infer clearance from absence alone.
+After clearing a traversal, restore a useful forward-looking view if needed before
+marking the overall task complete. Leave an already useful view alone; recenter_arm
+is an option when it helps, not a routine follow-up to move_arm.
 
 When a sought target is not visible, search systematically into new headings and
 viewpoints. Use search_active, search_direction (+1 left, -1 right), search_rotation_deg,

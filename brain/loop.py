@@ -65,6 +65,7 @@ def _mission_context(state: RobotState) -> dict:
     return {"current_goal": state.current_goal, "recent_transcript": state.last_user_command,
             "recent_observations": state.recent_observations[-8:], "findings": state.findings[-24:],
             "last_actions": state.last_actions[-8:], "prior_action_result": state.last_action_result,
+            "last_camera_adjustment": state.last_camera_adjustment,
             "mission_context": state.mission_context[-8:],
             "search_active": state.search_active, "search_direction": state.search_direction,
             "search_rotation_deg": state.search_rotation_deg,
@@ -105,10 +106,16 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
             result = {"status": "completed", "detail": "zero arm delta; no movement"}
         else:
             result = getattr(controller, name)(**params)
-        return {**result, "applied_args": params}
+        result = {**result, "applied_args": params}
     except Exception as exc:
         logger.exception("Tool=%s failed", name)
-        return {"status": "error", "detail": str(exc)}
+        result = {"status": "error", "detail": str(exc)}
+    if name in {"move_arm", "recenter_arm"}:
+        # Retain attempted camera changes, including failures and manual commands,
+        # after they leave recent action history. Never infer an absolute camera pose.
+        state.last_camera_adjustment = {"name": name, "arguments": params, "result": result,
+                                        "observation_before": None if direct else state.scene_description}
+    return result
 
 
 def _execute_direct(command: dict, state: RobotState, controller: RoboMasterController) -> None:
