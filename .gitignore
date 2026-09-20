@@ -31,6 +31,8 @@ vite.config.*.timestamp-*
 .venv/
 venv/
 /test/*.jpg
+/.cache/
+/recordings/
 __pycache__/
 *.pyc
 .DS_Store

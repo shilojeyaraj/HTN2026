@@ -2,132 +2,314 @@
 
 Autonomous voice-interactive rover built at Hack the North 2026. See [CLAUDE.md](CLAUDE.md) for the full architecture and project context.
 
-## Current milestone: CSI camera → laptop depth → Pi result
+## Current milestone: USB webcam + microphone → laptop
 
-Current hardware is a Pi 5, one working CSI camera, and GPS; motors/sensors
-are pending. The standalone pipeline below supersedes the older OAK-D/ROS
-setup for this milestone. Run commands from the repository root.
+A USB webcam plugs into the Pi 5. Its video and microphone audio stream to
+one laptop over TCP. The laptop opens a live video window and transcribes microphone audio locally.
+Recognized text appears below the video and as JSON in the laptop terminal.
+Optional monocular depth runs independently. There is no audio playback.
+Nothing is recorded to disk unless `--record` is enabled on the laptop.
+Run commands from the repository root.
 
 ### 1. Laptop
+
+`faster-whisper>=1.1,<2` is declared in `laptop/requirements.txt`. The root
+`requirements.txt` includes that file, so either install path gets transcription.
+For just webcam streaming/transcription, prefer the laptop requirements: the
+root file additionally installs dependencies for the older robot/voice stack.
+
+The laptop needs the Python dependencies below; ffplay is no longer used.
+The Pi still needs FFmpeg for webcam/microphone capture. Python setup:
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r laptop/requirements.txt
-python3 -m laptop.server --host 0.0.0.0
+python3 -m laptop.server --host 0.0.0.0 --no-depth
 ```
 
-For this laptop's existing `venv` and downloaded test cache:
+For this laptop's existing environment, the equivalent command is:
 
 ```sh
-HF_HOME=/tmp/htn2026-hf venv/bin/python -m laptop.server --host 0.0.0.0
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth
 ```
 
-Use a writable `HF_HOME` if your environment points to `/opt/hf-cache`.
+Wait for `Ready` before starting the Pi. `--no-depth` skips the model entirely;
+remove it to enable [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf).
+If the model cache points to unwritable `/opt/hf-cache`, prefix the command
+with `HF_HOME=/tmp/htn2026-hf` to use the existing downloaded test cache.
+CPU is the default; `--device cuda` / `--device mps` select supported accelerators.
+`--no-transcription` skips speech model loading and discards received audio.
+`--no-preview` hides video but keeps terminal transcription. The old `--mute`
+flag is removed because audio is never played. Tkinter/Pillow provide the desktop preview; Python needs Tk
+support (`python3-tk` on Debian/Ubuntu, or Tk support in a custom Python build).
 
-The first start downloads [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf).
-Wait for `Ready` before starting the client. CPU is the default; use
-`--device cuda` or `--device mps` when supported by your PyTorch installation.
-Find the laptop's hotspot IP with `hostname -I` on Linux (or Wi-Fi settings).
-Both devices must be on the same network. Allow inbound TCP port 8765 if needed.
-Use this unauthenticated TCP prototype only on a trusted private network;
-the default bind without `--host` is loopback.
+Both devices must be on the same network. Allow inbound TCP port 8765 if
+needed. This prototype is unauthenticated; use a trusted private network.
+Without `--host`, the server binds only to localhost.
 
-### 2. Sync the client from the laptop
+### System dependencies on another Unix machine
+
+The **receiver** is tested on Linux with Python 3.13. Use a 64-bit Python with
+available PyTorch, CTranslate2, ONNX Runtime, and PyAV wheels. Linux/macOS have
+[CTranslate2 binary packages](https://opennmt.net/CTranslate2/installation.html);
+this does not guarantee every Unix/CPU combination. macOS has not been tested
+in this project. BSD and unsupported/old Linux distributions may require
+native builds and are not an out-of-the-box target.
+
+**Debian/Ubuntu laptop**, before creating the virtual environment:
+
+```sh
+sudo apt update
+sudo apt install python3 python3-venv python3-pip python3-tk libgomp1 git rsync openssh-client
+```
+
+**macOS laptop**, using matching Homebrew Python/Tk versions:
+
+```sh
+brew install python@3.13 python-tk@3.13 git rsync
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r laptop/requirements.txt
+```
+
+[Homebrew's Tk package](https://formulae.brew.sh/formula/python-tk%403.13)
+must match the Python used to create the venv. For pyenv/custom builds, install
+Tcl/Tk development libraries before building Python; installing pip packages
+cannot repair a Python built without `_tkinter`. Verify in the activated venv:
+
+```sh
+python -m tkinter
+python -c "import faster_whisper, torch, torchvision; from PIL import ImageTk; print('Imports OK')"
+```
+
+The first command should open a test window. Preview requires a graphical
+desktop session (and a working display connection on Linux). On headless SSH
+sessions use `--no-preview`; transcripts still print to the terminal.
+
+**Pi/capture host:** the current capture implementation is Linux-only because
+it uses V4L2 and ALSA. It requires system `ffmpeg`, with those input backends,
+and camera/microphone device permissions. `v4l-utils` and `alsa-utils` provide
+the discovery commands below. Check backends with `ffmpeg -hide_banner -devices`.
+On Raspberry Pi OS, if opening the device reports permission denied, check
+membership of the `video`/`audio` groups and log in again after adding access.
+Capturing directly on macOS would need an AVFoundation capture implementation;
+installing FFmpeg alone does not make this Pi client portable to macOS.
+
+**Not required for normal laptop transcription:** system FFmpeg/ffplay,
+PortAudio, CUDA, or a cloud API key. Faster-whisper's pip dependencies provide
+the audio decoding/inference libraries. The synthetic integration test does
+require system `ffmpeg` (`sudo apt install ffmpeg` or `brew install ffmpeg`).
+The older `voice/stt.py` path uses `sounddevice` and separately needs PortAudio
+on Linux (`sudo apt install libportaudio2`); it is not used by this receiver.
+
+First startup needs internet access to download model weights and writable
+cache space. Speech weights default to `.cache/whisper/`; optional depth uses
+the Hugging Face cache. On a new machine, use a persistent writable cache such
+as `HF_HOME="$HOME/.cache/huggingface"` rather than this laptop's `/tmp` cache.
+Both machines need network reachability on TCP 8765. SSH/rsync are needed only
+for the documented sync workflow, not for streaming itself.
+
+### 2. Sync from the laptop
 
 ```sh
 ssh mainuser@172.20.10.11 'mkdir -p ~/HTN2026'
 rsync -av pi shared mainuser@172.20.10.11:~/HTN2026/
 ```
 
-The Pi IP may change; `htn2026.local` may also work. Only `pi/` and `shared/`
-are needed on the Pi; there are no pip dependencies there.
+Re-sync and restart both processes for this webcam/audio upgrade. The Pi IP
+may change; `htn2026.local` may also work. Only `pi/` and `shared/` are needed
+on the Pi; there are no Python package dependencies there.
 
-### 3. On the Pi
+### 3. Find the webcam and microphone on the Pi
+
+```sh
+sudo apt update
+sudo apt install ffmpeg v4l-utils alsa-utils
+v4l2-ctl --list-devices
+v4l2-ctl --device /dev/video8 --list-formats-ext
+arecord -l
+```
+
+Select the webcam's **capture** device (some webcams expose multiple video
+nodes). Select its audio card from `arecord -l`; audio and video device numbers
+are independent. A webcam without a built-in mic needs a separate USB mic.
+
+### 4. Start on the Pi
+
+The confirmed devices for this Pi are `/dev/video8` and microphone card 2,
+device 0. Device numbers may change after reconnecting USB hardware:
 
 ```sh
 cd ~/HTN2026
-python3 -m pi.client --host LAPTOP_IP --once
-# Then stream continuously, reconnecting after network failures:
-python3 -m pi.client --host LAPTOP_IP --fps 15 --quality 70
+python3 -m pi.client --host 172.20.10.3 --video-device /dev/video8 --audio-device plughw:2,0 --fps 15
 ```
 
-Replace `LAPTOP_IP` with the laptop's actual hotspot address (last verified:
-`172.20.10.3`), never `0.0.0.0` or the Pi's address.
+Replace these device names and the laptop IP with the actual values.
+`172.20.10.3` was the last verified laptop hotspot address; find the current
+one on the laptop with `ip -4 route`. Do not use `0.0.0.0` as the Pi's target.
 
-One persistent [`rpicam-vid` process](https://www.raspberrypi.com/documentation/computers/camera_software.html#rpicam-vid)
-captures 640×480 MJPEG into a pipe at a target 15 FPS. Frames are sent over
-TCP while a separate thread receives depth results. The laptop displays
-incoming frames immediately and runs depth on the newest available frame;
-it drops older pending frames instead of queuing inference work. The Pi
-also keeps only its newest pending capture if transmission falls behind.
-TCP itself can still add delay on congested Wi-Fi; reduce `--fps` or
-`--quality` if needed. Actual preview FPS depends on the camera, Wi-Fi,
-and laptop load; 15 FPS is a target, not a measured hardware guarantee.
-`--timeout 30` limits camera inactivity and network waits, including gaps
-between depth results. Increase it if inference takes longer than 30 seconds.
-`--fps` replaces the old `--interval` flag. `--once` still sends one frame
-and waits for its depth result.
+Defaults are `/dev/video0` for video and ALSA `default` for the microphone.
+Explicit `--audio-device` is preferable because the default may select a
+different input. `plughw` allows ALSA to convert device formats when needed.
 
-The laptop opens a live preview window when the first valid frame arrives.
-Run the server from your laptop desktop session; Tkinter and Pillow display
-the incoming frames entirely in memory. No frames are saved on either device;
-previous captures in `test/` are left alone. Close the window or press Escape
-to stop the server. Use `--no-preview` for a headless session. Tkinter is
-included in many Python installations (on Ubuntu/Debian, install `python3-tk`
-if missing; custom Python builds also need Tk support).
-For this streaming upgrade, re-run the sync step from your laptop and restart
-both server and Pi client. The desktop window remains responsive during depth
-inference. Stopping the Pi client also terminates its camera subprocess.
+The default requests webcam-native MJPEG at 640×480 and 15 FPS. We copy its
+JPEG frames without re-encoding on the Pi. Check the webcam's supported modes:
+if it does not offer MJPEG, try `--input-format yuyv422`. That fallback encodes
+JPEG on the Pi and uses more CPU. `--width`, `--height`, and `--fps` must match
+an available camera mode (dimensions are limited to 1920 per side).
+`--quality 70` controls JPEG quality only in the raw-video fallback; it does
+not alter webcam-native MJPEG. Reduce resolution/FPS if Wi-Fi cannot keep up.
 
-The window title reports displayed FPS. To isolate CPU inference from camera,
-Wi-Fi, and display performance, restart the laptop server with `--no-depth`:
+Use `--no-audio` on the Pi for video-only capture. `--once` sends one video
+frame and waits for its result, with audio disabled. `--image photo.jpg`
+remains a webcam-free video test and also disables audio. Camera and microphone
+errors are printed by FFmpeg; check the device arguments if either fails.
+`--timeout 30` limits capture inactivity and socket waits, including time
+between depth replies. The client reconnects after failures and terminates
+both capture processes on exit.
+
+### Live preview and transcription
+
+The window opens on the first valid video frame, and its title reports display
+FPS. Provisional transcripts update while speech is arriving, then finalize after
+a pause. Provisional wording may change as more context arrives. Close the window or press Escape
+to stop the server. Old images in `test/` are left alone; no new images or audio
+files are saved on either device unless laptop recording is enabled.
+
+Video capture, audio capture, network transmission, preview, transcription,
+and depth run independently. Queues retain the latest video and at most 200 ms of pending
+audio; older queued data is dropped under load. TCP and the audio device may add
+further latency. Speech processing has its own bounded queue described below.
+Transcripts are informational; they do not call the reasoning model or motors.
+
+The implementation uses FFmpeg's [V4L2 and ALSA inputs](https://ffmpeg.org/ffmpeg-devices.html)
+and [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for local
+CPU INT8 transcription (two inference threads). Install the updated laptop
+requirements before restarting; no Pi changes or re-sync are needed for STT.
+
+### Transcription setup and tuning
 
 ```sh
+venv/bin/python -m pip install -r laptop/requirements.txt
 venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth
 ```
 
-This mode skips model loading entirely and returns `status: "preview"` with
-no depth estimates. Re-sync the client before using it. Compare displayed FPS
-with and without depth enabled: an improvement implicates inference overhead;
-otherwise investigate capture/network/display or stale processes first.
+The first start downloads the English `base.en` speech model into the ignored
+project folder `.cache/whisper/`. Wait for `Ready`; after download, recognition
+runs entirely on the laptop. Audio is not sent to a cloud transcription API.
+`--stt-cache /writable/path` changes the cache. Use `--stt-model tiny.en` for
+less compute, `small.en` for a larger English model, or `base` for multilingual
+speech. These tradeoffs need testing with the actual microphone/noise level.
 
-Replies contain `relative_proximity` for left/center/right (0 = relatively
-farther, 1 = relatively nearer), raw inverse-depth scores, a
-`preferred_direction`, and timing. Scores use the 90th percentile of each
-third of the middle half of the image, normalized against that frame's
-5th/95th percentiles. These are **not meters, clearance, or calibrated
-collision probabilities**, and scores are not comparable across frames.
+Recognition is fully hands-off: no push-to-talk button. We attempt a provisional
+update every 0.8 seconds of incoming speech (`--partial-interval` adjusts this).
+This is repeated recognition of a growing utterance, not token-by-token model
+streaming; actual update latency includes inference time. More frequent updates
+use more CPU. Only the newest pending partial is kept, finals take priority,
+and partials still computing after their utterance ends are suppressed.
+
+We keep 200 ms of audio before speech starts, finish an utterance after 0.7 s
+of quiet, and split continuous speech at 10 s. Very short sounds (<200 ms)
+are ignored. A simple RMS gate starts/stops clips; Whisper's VAD additionally
+filters each clip. `--speech-threshold 0.015` controls the RMS gate: lower it
+for quiet speech, raise it if background noise keeps triggering recognition.
+The 10-second cap can split words; this is a minimal utterance-based pipeline.
+
+Up to two completed utterances can wait behind the active transcription.
+If inference falls behind, the oldest pending utterance is dropped with a
+warning so video remains responsive. Disconnect flushes the last utterance
+and drains the queue before accepting another Pi. Transcription itself creates
+no audio or transcript files; optional recording separately saves received media. Terminal JSON includes `type: "transcript"`, `utterance_id`,
+`text`, and `final: false` for provisional updates / `final: true` for completed
+utterances. Replace text with the same utterance ID rather than appending each
+revision. IDs restart per TCP connection. An empty final clears a provisional
+that was not confirmed; failures emit an empty final with an `error` field.
+The preview labels provisional text and replaces it on finalization. Silence produces no text output.
+Speech recognition can make mistakes, especially in noisy rooms; these texts
+are not authorized movement commands.
+
+### Optional laptop recording
+
+Add `--record` to the laptop server command:
+
+```sh
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record
+# Optionally choose another output directory:
+venv/bin/python -m laptop.server --host 0.0.0.0 --no-depth --record --record-dir /path/to/recordings
+```
+
+Each Pi connection creates a UTC-timestamped session folder (ignored by Git):
+
+```text
+recordings/20260919T143022.123456Z/
+  video.mp4
+  audio.wav
+  transcript.txt
+```
+
+`video.mp4` is silent H.264 video, including frames skipped by depth inference.
+`audio.wav` contains the received mono, 16-bit, 16 kHz microphone audio.
+`transcript.txt` contains one finalized utterance per line; provisional revisions
+are not saved. Disconnecting flushes the last utterance before closing the files.
+Reconnecting creates a new folder. No Pi code sync is needed.
+
+Recording uses PyAV; no additional system FFmpeg installation is required on
+the laptop. H.264 encoding and disk writes add work to reception, so use a fast
+local disk with enough free space. MP4 is created when the first valid video
+frame arrives. With no microphone audio, the WAV is empty; with
+`--no-transcription`, the transcript is empty. Recording also works with
+`--no-depth` and `--no-preview`.
+
+Video timing reflects laptop receipt time; WAV samples are stored consecutively.
+Exact A/V synchronization and reconstruction of data lost before receipt are
+not guaranteed. Recording errors close the connection and are logged.
+
+Stop the Pi client, close the preview window, or use Ctrl+C on the server to
+finalize the files and pending transcription. Force-killing the process or
+losing power can leave unfinished files. Existing recordings are never
+overwritten or automatically deleted.
+
+### Depth results
+
+`--no-depth` returns `status: "preview"` with no depth estimates. With depth
+enabled, replies contain left/center/right `relative_proximity` (0 = relatively
+farther, 1 = relatively nearer), `raw_inverse_depth`, and `preferred_direction`.
+Scores use each region's 90th percentile in the middle half of the image,
+normalized against that frame's 5th/95th percentiles. These are **not meters,
+clearance, or collision probabilities** and cannot be compared across frames.
 Flat maps return `uncertain`; failed inference returns `error`.
-The preferred direction only identifies the relatively farther region.
 
-`frame_id` identifies the sampled frame's position in this TCP connection,
-starting at 1; gaps are expected because depth samples fewer frames than the
-preview displays. `processing_ms` measures depth processing time;
-`server_frame_age_ms` measures time from full frame receipt to result creation
-on the laptop. It excludes Pi capture and network transit. The old
-`capture_roundtrip_ms` field is removed because capture and replies now overlap.
+`frame_id` counts only video frames in the current TCP connection, starting at
+1. Gaps are expected because depth samples fewer frames than preview displays.
+`processing_ms` measures depth processing time; `server_frame_age_ms` measures
+time from full video receipt to result creation, excluding Pi capture and
+network transit. Audio packets never increment frame IDs or trigger inference.
 
-This milestone only prints results. It does not connect to the existing
-arbiter or motors. Before movement, add independent onboard obstacle sensing
-and a motor watchdog that stops on stale commands (~0.5 seconds); laptop
-depth over Wi-Fi cannot provide the existing onboard safety guarantee.
+Results are advisory only. This pipeline is not wired to motors or the arbiter.
+Before movement, add independent onboard obstacle sensing and a motor watchdog
+that stops stale commands (~0.5 seconds); Wi-Fi depth cannot provide that safety.
 
 ### Local checks without the Pi
 
 ```sh
 python3 -m unittest test_camera_pipeline
-# With the real server running, use any local JPEG to test actual inference:
+# With the server running:
 python3 -m pi.client --host 127.0.0.1 --image /path/to/photo.jpg --once
 ```
 
-The automated check covers fragmented TCP/MJPEG messages, length limits,
-disconnects, invalid JPEG recovery, camera-process cleanup, depth reduction,
-and preview delivery plus frame dropping while synthetic inference is blocked.
-It does not download model weights or verify physical camera capture.
-Wire format: 4-byte unsigned big-endian length + JPEG upstream / UTF-8 JSON
-downstream, maximum 2 MiB / 8 KiB respectively. Directions are independent;
-only frames sampled by depth produce replies. JPEG/JSON framing is unchanged.
+Checks cover fragmented TCP/MJPEG, length limits, invalid audio/JPEG handling,
+process cleanup, and audio/video delivery while depth is blocked. They do not
+verify physical USB hardware. A synthetic FFmpeg capture/transcription integration
+check is also available as `python3 -m unittest test_webcam_audio` (requires
+ffmpeg; uses synthetic devices and a stub recognizer). Speech segmentation and
+queue behavior are checked with `python3 -m unittest test_transcription`.
+Recording and file-finalization checks: `python3 -m unittest test_recording`.
+
+Wire format: uint32 big-endian payload length, followed by JPEG bytes **or**
+`PCM1` + mono signed 16-bit little-endian audio at 16 kHz (up to 640 audio bytes,
+20 ms). Upstream payloads are at most 2 MiB. Downstream JSON replies are at
+most 8 KiB. Both directions are independent; only sampled video yields replies.
 
 ## Earlier full-stack scaffold (camera integration unfinished)
 

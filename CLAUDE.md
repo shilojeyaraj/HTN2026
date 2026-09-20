@@ -3,15 +3,21 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 ## Current hardware / first milestone (2026-09-19 update)
 
-User-confirmed setup supersedes the older OAK-D/ROS assumptions below:
-Pi 5 Model B Rev 1.0, one working CSI camera (`rpicam-*`), GPS, motors/sensors
-pending. LiDAR is unavailable. Pi captures frames and handles future hardware
-I/O; laptop performs monocular depth over Wi-Fi. The standalone `pi/`,
-`laptop/`, and `shared/` TCP pipeline and commands are documented in README.md.
-Pi hostname `htn2026`, user `mainuser`, last IP `172.20.10.11` on an iPhone
-hotspot. Depth is relative and results are advisory only; this pipeline is
-not wired to the old camera interface, reflex loop, or motors. Preserve the
-onboard watchdog and independent safety requirements before adding motion.
+User-confirmed setup:
+DJI RoboMaster EP Core as the vehicle platform (pivoted from custom chassis).
+USB webcam plus microphone for camera and audio input. FFmpeg captures V4L2
+video and ALSA audio on the Pi; the laptop displays video and transcribes audio
+locally with faster-whisper (CPU INT8, base.en default), with optional depth.
+Transcripts are wired to the brain via TranscriptBuffer. No ultrasonic sensors
+(removed due to rover vibration — camera depth only). LiDAR is unavailable.
+Pi captures frames and handles hardware I/O; laptop performs monocular depth
+over Wi-Fi. The standalone `pi/`, `laptop/`, and `shared/` TCP pipeline and
+commands are documented in README.md. Motor control via RoboMaster SDK
+(control/motors.py — teammate implementing). Preserve the onboard watchdog
+and independent safety requirements before adding motion.
+
+**Gemini Project Number:** 305405938625 (for Devpost submission)
+**Gemini API Key:** in `.env` as `GEMINI_API_KEY` — also connect as BYOK in Backboard dashboard
 
 Project context for an autonomous voice-interactive rover built at Hack the North 2026.
 Single source of truth for the build. Companion docs: **ARCHITECTURE.md** (data flow diagrams), **BACKBOARD.md** (the brain's API), **PRIZE_TRACKS.md** (sponsor tracks), **BUILD_PLAN.md** (phased build status), **TODO.md** (outstanding action items). Read CLAUDE.md and ARCHITECTURE.md before writing code.
@@ -22,14 +28,15 @@ Single source of truth for the build. Companion docs: **ARCHITECTURE.md** (data 
 
 - **Event:** Hack the North 2026, University of Waterloo, Sept 18 to 20 (36 hours).
 - **Judging:** WOW factor, technical ability, originality, design. The pitch is a **live demo**, not slides. The robot must physically move.
-- **Committed tracks:** Backboard, Baseten, Gemini, ElevenLabs, Rox. openJiuwen stacks cleanly. Full scopes and the role-per-sponsor split are in PRIZE_TRACKS.md.
+- **Committed tracks:** Backboard, Baseten, Gemini, ElevenLabs, Rox, Huawei (openJiuwen). Full scopes and the role-per-sponsor split are in PRIZE_TRACKS.md.
 - **Prize claims are due on Devpost by 2:00 PM EDT Saturday.** Assign an owner.
+- **Gemini Project Number:** 305405938625
 
 ---
 
 ## 2. What we are building
 
-A small differential-drive rover that perceives with a camera, reasons with an LLM agent brain, and can be spoken to and talk back. It drives itself, avoids obstacles, takes spoken commands, and narrates what it is doing.
+A DJI RoboMaster EP Core rover that perceives with a USB webcam, reasons with an LLM agent brain, and can be spoken to and talk back. It drives itself, avoids obstacles, takes spoken commands, and narrates what it is doing.
 
 Core technical story: **a hierarchical two-loop architecture** where fast reflexes keep the robot safe while a slower LLM brain does the thinking. This is both the honest engineering and the demo narrative.
 
@@ -127,13 +134,21 @@ turn(degrees: float)         # + left, - right, then stop
 stop()                       # halt
 speak(text: str)             # ElevenLabs TTS (async, never blocks)
 # read side:
-get_obstacles()             # latest OAK-D detections
+get_obstacles()             # latest depth detections
 get_state()                  # pose, velocity, goal
 get_temperature()            # ambient temp: {celsius, status: ok|warm|overheat}
 get_audio()                  # mic: {db, event: {kind, label, text, bearing_deg}|null}
 get_gyro()                   # IMU: {pitch_deg, roll_deg, accel_z_g, tipped, bump}
+# teammate tools:
+look_around()               # call vision agent (Gemini Flash) for fresh scene
+check_map(radius_m)          # query occupancy map for nearby features
+check_safety(action)         # ask safety agent to vet a proposed action
+# knowledge tools:
+search_knowledge(query)     # RAG search of rescue protocols + past encounters
+log_finding(type, desc)      # store mission finding in Backboard memory
+analyze_patterns()           # analyze patterns across all stored memory
 ```
-The brain also has a **fast path**: a Baseten fine-tuned command parser (`brain/command_parser.py`) intercepts simple voice commands ("forward 2 meters", "turn left") and executes them directly without a Backboard round-trip. Complex or unrecognized commands fall through to the Backboard brain.
+16 verbs total. The brain also has a **fast path**: a Baseten fine-tuned command parser (`brain/command_parser.py`) intercepts simple voice commands ("forward 2 meters", "turn left") and executes them directly without a Backboard round-trip. Complex or unrecognized commands fall through to the Backboard brain.
 Make verbs **bounded and self-completing**: `forward(0.5)` drives ~0.5 m (open-loop time = distance / speed is fine), stops, and returns a status (`completed` or `stopped_by_obstacle` with distance). This keeps the loop clean and gives the brain feedback to reason with. Keep `set_goal(x, y)` as an upgrade only if odometry ends up solid.
 
 ### Verb to velocity
@@ -167,9 +182,10 @@ A minimal onboard node: read depth / detections, emergency-stop and simple avoid
 ## 8. Hardware
 
 - **Host / compute:** Raspberry Pi 5 Model B Rev 1.0 (4 GB) for capture/playback, the agent loop, and cloud calls. A laptop on the same Wi-Fi runs monocular depth (Depth-Anything-V2-Small) and sends results back over TCP. No GPU on the Pi.
-- **Camera (primary):** Pi CSI camera (`rpicam-vid`), 640x480 MJPEG at 15 fps. No OAK-D, no LiDAR. Depth is relative (monocular), not absolute meters — see CAMERA_GAP.md for the conversion and its limitations.
-- **Audio:** USB webcam mic (capture), powered USB/BT speaker (playback), push button (push-to-talk). Avoid analog "sound sensor" modules; they only detect loudness.
-- **Chassis:** differential-drive base + motor driver. **TODO: confirm** (DJI Robomaster, ESP32 car kits, custom base, or Bracket Bot base if we chase that track).
+- **Vehicle:** DJI RoboMaster EP Core (pivoted from custom chassis). Motor control via RoboMaster SDK in `control/motors.py`.
+- **Camera (primary):** USB webcam, 640x480 MJPEG at 15 fps. No OAK-D, no LiDAR. Depth is relative (monocular), not absolute meters — see CAMERA_GAP.md for the conversion and its limitations.
+- **Audio:** USB webcam mic (capture), powered USB/BT speaker (playback), push button (push-to-talk, optional). Avoid analog "sound sensor" modules; they only detect loudness.
+- **No ultrasonic sensors** — removed due to rover vibration. Camera depth (Depth-Anything-V2-Small) is the sole obstacle detection source.
 - **Depth pipeline:** Pi captures JPEG → TCP to laptop → Depth-Anything-V2-Small → proximity scores {left, center, right} → back to Pi → converted to pseudo-Detection objects. See `perception/camera.py`, `laptop/server.py`, `pi/client.py`, `shared/protocol.py`.
 
 ---
@@ -275,11 +291,10 @@ baseten train checkpoint deploy --job-id <id>            # deploy checkpoint →
 
 ## 13. Open decisions / TODO
 
-- [ ] Confirm chassis and motor driver, plus power/battery (critical path).
-- [ ] Add a real distance sensor (ultrasonic/ToF) for onboard obstacle avoidance when Wi-Fi depth is stale — see CAMERA_GAP.md.
+- [ ] Wire `publish_cmd_vel` to RoboMaster EP Core motors (teammate implementing — `control/motors.py`).
+- [ ] Connect Gemini API key as BYOK in Backboard dashboard (key in `.env`).
+- [ ] Submit prize selections on Devpost by 2:00 PM EDT Saturday. Gemini Project Number: 305405938625.
+- [ ] Delete old Baseten Whisper deployments (qjjorx4q, qk54z7eq) — still consuming GPU.
+- [ ] Set up laptop depth server (`python -m laptop.server --host 0.0.0.0 --port 8765`).
 - [ ] Wire real sensors: temperature (DHT22/DS18B20), IMU (MPU6050), audio classification.
-- [ ] Wire `publish_cmd_vel` to real motors (currently no-op lambda in `main.py`).
-- [ ] Wire GPIO push-to-talk button (pin 17).
-- [ ] Get Baseten booth access: RTX-PRO-6000 (deploy Whisper) + H100 (run fine-tune).
-- [ ] Submit prize selections on Devpost by 2:00 PM EDT Saturday.
-- See TODO.md for the full action item list.
+- [ ] Wire GPIO push-to-talk button (pin 17) — though less relevant with always-on STT.

@@ -3,3 +3,5 @@ Pillow
 torch
 torchvision
 transformers>=4.42,<6
+faster-whisper>=1.1,<2
+av>=11

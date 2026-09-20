@@ -34,8 +34,13 @@ verbs it returns. The rest of this file does not change.
 import math
 import time
 import argparse
+import threading
+import os
+import sys
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     import matplotlib.pyplot as plt
@@ -43,6 +48,13 @@ try:
     _HAS_MPL = True
 except Exception:
     _HAS_MPL = False
+
+try:
+    from control.mapper import OccupancyMap
+    from control.map_server import MapServer
+    _HAS_MAP = True
+except Exception:
+    _HAS_MAP = False
 
 
 # --------------------------------------------------------------------------- #
@@ -249,13 +261,16 @@ class LiveViewer:
 # --------------------------------------------------------------------------- #
 # A stand-in brain. Replace this with your Backboard tick.
 # --------------------------------------------------------------------------- #
-def demo_brain(robot: FakeRobot, ticks: int = 60):
+def demo_brain(robot: FakeRobot, ticks: int = 60, mapper=None):
     """
     A dumb reactive policy so you can watch the sim drive immediately.
 
     This is exactly where your real brain plugs in: instead of the if/else
     below, send get_detections()/get_state() to Backboard and execute the
     tool calls it returns. The verb calls stay identical.
+
+    If a mapper is provided, each tick feeds detections into the occupancy
+    grid so the frontend can render a live area map.
     """
     for _ in range(ticks):
         dets = robot.get_detections()
@@ -271,6 +286,12 @@ def demo_brain(robot: FakeRobot, ticks: int = 60):
             res = robot.forward(0.5)
             if res["status"] == "stopped_by_obstacle":
                 robot.turn(50)
+
+        if mapper is not None:
+            pose = (robot.x, robot.y, robot.theta)
+            mapper.add_trail(pose)
+            for d in dets:
+                mapper.add_ultrasonic(pose, d["bearing_deg"], d["distance"])
 
 
 def build_room() -> FakeRobot:
@@ -289,12 +310,25 @@ def main():
     ap.add_argument("--headless", action="store_true",
                     help="run without a window and print a text trace")
     ap.add_argument("--ticks", type=int, default=60)
+    ap.add_argument("--map", action="store_true",
+                    help="stream a live occupancy map via WebSocket (port 8766)")
     args = ap.parse_args()
 
     robot = build_room()
+    mapper = None
+
+    if args.map and _HAS_MAP:
+        mapper = OccupancyMap(size_m=6.0, resolution_m=0.1)
+        server = MapServer(mapper, lambda: (robot.x, robot.y, robot.theta))
+        threading.Thread(target=server.run_forever, daemon=True).start()
+        print("Map server streaming on ws://0.0.0.0:8766 — open the frontend Dashboard")
+    elif args.map and not _HAS_MAP:
+        print("Map streaming needs the 'websockets' package: pip install websockets")
 
     if args.headless or not _HAS_MPL:
-        robot.cfg.realtime = False
+        # Keep realtime pacing when streaming a map so the frontend sees it build up
+        if not args.map:
+            robot.cfg.realtime = False
         # print a compact trace so you can verify logic in CI
         def trace(r):
             trace.n += 1
@@ -303,14 +337,21 @@ def main():
         trace.n = 0
         robot.step_callback = trace
         print("Running headless...")
-        demo_brain(robot, ticks=args.ticks)
+        demo_brain(robot, ticks=args.ticks, mapper=mapper)
         print(f"Done. final={robot.get_state()} status={robot.last_status} "
               f"trail_points={len(robot.trail)}")
+        if args.map and _HAS_MAP:
+            print("Map server alive — press Ctrl+C to stop. Open the frontend Dashboard to view.")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
         return
 
     viewer = LiveViewer(robot)
     robot.step_callback = viewer.update
-    demo_brain(robot, ticks=args.ticks)
+    demo_brain(robot, ticks=args.ticks, mapper=mapper)
     print("Demo finished. Close the window to exit.")
     plt.ioff()
     plt.show()

@@ -1,10 +1,11 @@
-"""CSI JPEG -> relative depth -> three proximity estimates. No motor control."""
+"""Webcam preview, local speech transcription, and optional depth. No motor control."""
 
 import argparse
 from collections import deque
 import io
 import json
 import logging
+from pathlib import Path
 import socket
 import time
 import threading
@@ -12,7 +13,7 @@ import threading
 import numpy as np
 from PIL import Image
 
-from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
+from shared.protocol import AUDIO_PREFIX, MAX_FRAME, MAX_RESULT, audio_samples, receive, send
 
 MODEL = "depth-anything/Depth-Anything-V2-Small-hf"
 
@@ -53,7 +54,8 @@ def load_model(device):
     return infer
 
 
-def handle_connection(conn, infer, show_frame=lambda image: None):
+def handle_connection(conn, infer, show_frame=lambda image: None, receive_audio=lambda samples: None,
+                      drain_transcripts=None, recording=None, shutdown=None):
     pending = deque(maxlen=1)
     condition = threading.Condition()
     stopped = threading.Event()
@@ -64,6 +66,12 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
         try:
             while not stopped.is_set():
                 jpeg = receive(conn, MAX_FRAME)
+                if jpeg.startswith(AUDIO_PREFIX):
+                    samples = audio_samples(jpeg)
+                    if recording is not None:
+                        recording.audio(samples)
+                    receive_audio(samples)
+                    continue
                 frame_id += 1
                 received_at = time.monotonic()
                 try:
@@ -75,6 +83,8 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
                 except Exception:
                     logging.exception("Frame decoding failed")
                     rgb = None
+                if recording is not None and rgb is not None:
+                    recording.video(rgb)
                 with condition:
                     pending.append((frame_id, received_at, rgb))
                     condition.notify()
@@ -84,6 +94,17 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
                 condition.notify()
 
     reader = threading.Thread(target=receive_frames, daemon=True)
+    def watch_shutdown():
+        while not stopped.wait(0.1):
+            if shutdown is not None and shutdown.is_set():
+                try:
+                    conn.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                return
+
+    watcher = threading.Thread(target=watch_shutdown, daemon=True)
+    watcher.start()
     reader.start()
     try:
         while True:
@@ -107,6 +128,10 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
                           processing_ms=round((time.monotonic() - start) * 1000),
                           server_frame_age_ms=round((time.monotonic() - received_at) * 1000),
                           advisory_only=True)
+            if drain_transcripts is not None:
+                transcripts = drain_transcripts()
+                if transcripts:
+                    result["transcripts"] = transcripts
             send(conn, json.dumps(result, allow_nan=False).encode(), MAX_RESULT)
     finally:
         stopped.set()
@@ -115,6 +140,7 @@ def handle_connection(conn, infer, show_frame=lambda image: None):
         except OSError:
             pass
         reader.join()
+        watcher.join()
 
 
 def main():
@@ -125,32 +151,80 @@ def main():
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--no-preview", action="store_true", help="run without a desktop window")
     parser.add_argument("--no-depth", action="store_true", help="preview only; skip model loading and inference")
+    parser.add_argument("--no-transcription", action="store_true", help="skip speech model and discard audio")
+    parser.add_argument("--stt-model", default="base.en", help="faster-whisper model name or local model path")
+    parser.add_argument("--stt-cache", type=Path, default=Path(__file__).resolve().parent.parent / ".cache" / "whisper")
+    parser.add_argument("--speech-threshold", type=float, default=0.015, help="speech RMS threshold, 0–1")
+    parser.add_argument("--partial-interval", type=float, default=0.8, help="seconds of audio between provisional updates")
+    parser.add_argument("--record", action="store_true", help="save silent MP4, WAV, and final transcript in a timestamped folder")
+    parser.add_argument("--record-dir", type=Path, default=Path(__file__).resolve().parent.parent / "recordings")
     args = parser.parse_args()
     if not np.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("timeout must be positive and finite")
+    if not np.isfinite(args.speech_threshold) or not 0 < args.speech_threshold < 1:
+        parser.error("speech threshold must be between 0 and 1")
+    if not np.isfinite(args.partial_interval) or args.partial_interval <= 0:
+        parser.error("partial interval must be positive and finite")
     logging.basicConfig(level=logging.INFO)
     if args.no_preview:
         serve(args)
     else:
         from laptop.preview import run_preview
-        run_preview(lambda show_frame: serve(args, show_frame))
+        run_preview(lambda show_frame, show_text, shutdown: serve(args, show_frame, show_text, shutdown))
 
 
-def serve(args, show_frame=lambda image: None):
+def serve(args, show_frame=lambda image: None, show_text=lambda text: None, shutdown=None):
+    from laptop.audio import audio_transcription, load_transcriber
+    from laptop.recording import Recording
+
+    shutdown = shutdown or threading.Event()
+    transcribe = None if args.no_transcription else load_transcriber(args.stt_model, args.stt_cache)
     infer = None if args.no_depth else load_model(args.device)
+    transcript_queue = deque(maxlen=8)
+    recording = None
+
+    def transcript(event):
+        print(json.dumps(event, ensure_ascii=False), flush=True)
+        show_text(event)
+        if event.get("final") and event.get("text"):
+            transcript_queue.append({
+                "text": event["text"],
+                "utterance_id": event.get("utterance_id", 0),
+            })
+        if recording is not None:
+            recording.transcript(event)
+
+    def drain_transcripts():
+        items = list(transcript_queue)
+        transcript_queue.clear()
+        return items
+
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((args.host, args.port))
         server.listen(1)
+        server.settimeout(0.5)
         logging.info("Ready on %s:%s", args.host, args.port)
-        while True:
-            conn, address = server.accept()
+        while not shutdown.is_set():
+            try:
+                conn, address = server.accept()
+            except socket.timeout:
+                continue
             with conn:
                 conn.settimeout(args.timeout)
                 logging.info("Pi connected: %s", address)
                 try:
-                    handle_connection(conn, infer, show_frame)
+                    recording = Recording(args.record_dir) if args.record else None
+                    try:
+                        with audio_transcription(transcribe, transcript, args.speech_threshold,
+                                                 args.partial_interval) as receive_audio:
+                            handle_connection(conn, infer, show_frame, receive_audio,
+                                              drain_transcripts, recording, shutdown)
+                    finally:
+                        if recording is not None:
+                            recording.close()
+                        recording = None
                 except (EOFError, OSError, ValueError) as exc:
                     logging.info("Client disconnected: %s", exc)
                     show_frame(None)

@@ -15,8 +15,8 @@ import numpy as np
 from PIL import Image
 
 from laptop.server import handle_connection, summarize
-from pi.client import mjpeg_frames, stream
-from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
+from pi.client import camera_command, mjpeg_frames, stream
+from shared.protocol import AUDIO_CHUNK, AUDIO_PREFIX, MAX_FRAME, MAX_RESULT, audio_samples, receive, send
 
 
 class PipelineTest(unittest.TestCase):
@@ -54,11 +54,13 @@ class PipelineTest(unittest.TestCase):
         try:
             with client, patch("pi.client.subprocess.Popen", return_value=camera) as launch:
                 with patch("builtins.print") as output:
-                    stream(client, SimpleNamespace(image=None, once=True, fps=15, quality=70, timeout=3))
+                    stream(client, SimpleNamespace(image=None, once=True, fps=15, quality=70, timeout=3,
+                           no_audio=True, input_format="mjpeg", width=640, height=480, video_device="/dev/video0"))
                 result = json.loads(output.call_args.args[0])
                 self.assertEqual(result["frame_id"], 1)
                 self.assertEqual(result["status"], status)
-                self.assertIn("rpicam-vid", launch.call_args.args[0])
+                self.assertIn("ffmpeg", launch.call_args.args[0])
+                self.assertIn("copy", launch.call_args.args[0])
                 self.assertIsNotNone(camera.poll(), "camera process leaked")
         finally:
             client.close()
@@ -80,6 +82,19 @@ class PipelineTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             list(mjpeg_frames([b"\xff\xd8" + b"x" * MAX_FRAME]))
 
+    def test_audio_validation_and_raw_webcam_fallback(self):
+        pcm = b"\x00\x01" * (AUDIO_CHUNK // 2)
+        self.assertEqual(audio_samples(AUDIO_PREFIX + pcm), pcm)
+        for data in (b"", b"x", pcm + b"xx"):
+            with self.assertRaises(ValueError):
+                audio_samples(AUDIO_PREFIX + data)
+        args = SimpleNamespace(input_format="yuyv422", width=640, height=480,
+                               fps=15, quality=70, video_device="/dev/video2")
+        command = camera_command(args)
+        self.assertIn("/dev/video2", command)
+        self.assertIn("-q:v", command)
+        self.assertNotIn("copy", command)
+
     def test_preview_continues_while_depth_is_busy(self):
         client, server = socket.socketpair()
         client.settimeout(3)
@@ -88,6 +103,7 @@ class PipelineTest(unittest.TestCase):
         release = threading.Event()
         all_displayed = threading.Event()
         displayed = []
+        audio = []
         inferred = []
         errors = []
 
@@ -107,7 +123,7 @@ class PipelineTest(unittest.TestCase):
         def serve():
             with server:
                 try:
-                    handle_connection(server, infer, display)
+                    handle_connection(server, infer, display, audio.append)
                 except EOFError:
                     pass
                 except Exception as exc:
@@ -121,8 +137,10 @@ class PipelineTest(unittest.TestCase):
             send(client, jpeg.getvalue(), MAX_FRAME)
             self.assertTrue(busy.wait(2))
             for _ in range(9):
+                send(client, AUDIO_PREFIX + b"\x00\x01" * (AUDIO_CHUNK // 2), MAX_FRAME)
                 send(client, jpeg.getvalue(), MAX_FRAME)
             self.assertTrue(all_displayed.wait(2), "preview blocked behind depth")
+            self.assertEqual(len(audio), 9, "audio blocked behind depth")
             release.set()
             self.assertEqual(json.loads(receive(client, MAX_RESULT))["frame_id"], 1)
             self.assertEqual(json.loads(receive(client, MAX_RESULT))["frame_id"], 10)

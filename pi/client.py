@@ -1,4 +1,4 @@
-"""Stream CSI MJPEG to the laptop while receiving depth results independently."""
+"""Stream USB webcam video and microphone audio; receive depth independently."""
 
 import argparse
 from collections import deque
@@ -11,11 +11,35 @@ import subprocess
 import threading
 import time
 
-from shared.protocol import MAX_FRAME, MAX_RESULT, receive, send
+from shared.protocol import AUDIO_CHUNK, AUDIO_PREFIX, AUDIO_RATE, MAX_FRAME, MAX_RESULT, receive, send
+
+
+def camera_command(args):
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
+               "-f", "v4l2", "-input_format", args.input_format,
+               "-framerate", str(args.fps), "-video_size", f"{args.width}x{args.height}",
+               "-i", args.video_device, "-an"]
+    if args.input_format == "mjpeg":
+        command += ["-c:v", "copy"]  # Use the webcam's JPEG encoder without re-encoding.
+    else:
+        command += ["-c:v", "mjpeg", "-threads", "1", "-q:v", str(31 - round(args.quality * 29 / 100))]
+    return command + ["-f", "mjpeg", "-flush_packets", "1", "pipe:1"]
+
+
+def pipe_chunks(process, stopped, timeout):
+    with selectors.DefaultSelector() as selector:
+        selector.register(process.stdout, selectors.EVENT_READ)
+        while not stopped.is_set():
+            if not selector.select(timeout):
+                raise TimeoutError("capture device stopped producing data")
+            chunk = process.stdout.read1(65536)
+            if not chunk:
+                return
+            yield chunk
 
 
 def mjpeg_frames(chunks):
-    """Split rpicam's MJPEG stream, including markers split across reads."""
+    """Split FFmpeg's MJPEG stream, including markers split across reads."""
     data = bytearray()
     for chunk in chunks:
         data.extend(chunk)
@@ -40,18 +64,29 @@ def mjpeg_frames(chunks):
         raise EOFError("truncated MJPEG stream")
 
 
-def stream(sock, args):
+def stream(sock, args, on_transcript=None, on_depth=None, on_frame=None):
     pending = deque(maxlen=1)
+    audio_pending = deque(maxlen=10)  # At most 200 ms; drop oldest audio on a slow link.
     condition = threading.Condition()
     stopped = threading.Event()
     errors = []
     camera = None
+    microphone = None
     if not args.image:
-        camera = subprocess.Popen([
-            "rpicam-vid", "--nopreview", "--timeout", "0", "--codec", "mjpeg",
-            "--width", "640", "--height", "480", "--framerate", str(args.fps),
-            "--quality", str(args.quality), "--flush", "--output", "-",
-        ], stdout=subprocess.PIPE)
+        camera = subprocess.Popen(camera_command(args), stdout=subprocess.PIPE)
+        try:
+            if not args.no_audio and not args.once:
+                microphone = subprocess.Popen([
+                    "ffmpeg", "-hide_banner", "-loglevel", "warning", "-nostdin",
+                    "-f", "alsa", "-channels", "1", "-i", args.audio_device,
+                    "-ac", "1", "-ar", str(AUDIO_RATE), "-c:a", "pcm_s16le",
+                    "-f", "s16le", "-flush_packets", "1", "pipe:1",
+                ], stdout=subprocess.PIPE)
+        except OSError:
+            camera.kill()
+            camera.wait()
+            camera.stdout.close()
+            raise
 
     def fail(exc):
         errors.append(exc)
@@ -69,6 +104,8 @@ def stream(sock, args):
                 jpeg = args.image.read_bytes()
                 if not 0 < len(jpeg) <= MAX_FRAME:
                     raise ValueError("invalid JPEG file size")
+                if on_frame:
+                    on_frame(jpeg)
                 while not stopped.is_set():
                     with condition:
                         pending.append(jpeg)
@@ -76,17 +113,9 @@ def stream(sock, args):
                     if args.once or stopped.wait(1 / args.fps):
                         return
             else:
-                def chunks():
-                    with selectors.DefaultSelector() as selector:
-                        selector.register(camera.stdout, selectors.EVENT_READ)
-                        while not stopped.is_set():
-                            if not selector.select(args.timeout):
-                                raise TimeoutError("camera stopped producing frames")
-                            chunk = camera.stdout.read1(65536)
-                            if not chunk:
-                                return
-                            yield chunk
-                for jpeg in mjpeg_frames(chunks()):
+                for jpeg in mjpeg_frames(pipe_chunks(camera, stopped, args.timeout)):
+                    if on_frame:
+                        on_frame(jpeg)
                     with condition:
                         pending.append(jpeg)
                         condition.notify()
@@ -97,22 +126,44 @@ def stream(sock, args):
         except (OSError, EOFError, ValueError) as exc:
             fail(exc)
 
+    def capture_audio():
+        try:
+            data = bytearray()
+            for chunk in pipe_chunks(microphone, stopped, args.timeout):
+                data.extend(chunk)
+                while len(data) >= AUDIO_CHUNK:
+                    packet = AUDIO_PREFIX + bytes(data[:AUDIO_CHUNK])
+                    del data[:AUDIO_CHUNK]
+                    with condition:
+                        audio_pending.append(packet)
+                        condition.notify()
+            if not stopped.is_set():
+                raise EOFError("microphone stream ended; check --audio-device or use --no-audio")
+        except (OSError, EOFError, ValueError) as exc:
+            fail(exc)
+
     def transmit():
         try:
             while not stopped.is_set():
                 with condition:
-                    condition.wait_for(lambda: pending or stopped.is_set())
+                    condition.wait_for(lambda: pending or audio_pending or stopped.is_set())
                     if stopped.is_set():
                         return
-                    jpeg = pending.pop()
-                send(sock, jpeg, MAX_FRAME)
-                if args.once:
+                    packets = list(audio_pending)
+                    audio_pending.clear()
+                    if pending:
+                        packets.append(pending.pop())
+                for packet in packets:
+                    send(sock, packet, MAX_FRAME)
+                if args.once:  # Single-frame diagnostic does not capture audio.
                     return
         except (OSError, ValueError) as exc:
             fail(exc)
 
     workers = [threading.Thread(target=capture, daemon=True),
                threading.Thread(target=transmit, daemon=True)]
+    if microphone:
+        workers.append(threading.Thread(target=capture_audio, daemon=True))
     for worker in workers:
         worker.start()
     try:
@@ -120,6 +171,11 @@ def stream(sock, args):
             result = json.loads(receive(sock, MAX_RESULT))
             if not isinstance(result, dict) or result.get("status") not in {"ok", "uncertain", "error", "preview"}:
                 raise ValueError("invalid server result")
+            if on_depth and result.get("status") in ("ok", "uncertain"):
+                on_depth(result)
+            if on_transcript and result.get("transcripts"):
+                for t in result["transcripts"]:
+                    on_transcript(t["text"], t.get("utterance_id", 0))
             print(json.dumps(result), flush=True)
             if args.once:
                 return
@@ -135,24 +191,66 @@ def stream(sock, args):
             sock.shutdown(socket.SHUT_RDWR)
         except OSError:
             pass
-        if camera:
-            camera.terminate()
-            try:
-                camera.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                camera.kill()
-                camera.wait()
+        for process in (camera, microphone):
+            if process:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
         for worker in workers:
             worker.join()
-        if camera:
-            camera.stdout.close()
+        for process in (camera, microphone):
+            if process:
+                process.stdout.close()
+
+
+def start_streaming(host, port=8765, video_device="/dev/video0",
+                    audio_device="default", fps=15, width=640, height=480,
+                    quality=70, input_format="mjpeg", no_audio=False,
+                    on_depth=None, on_transcript=None, on_frame=None):
+    """Start the USB webcam + mic streaming pipeline in a background thread.
+
+    Pushes depth results to on_depth(result_dict), transcripts to
+    on_transcript(text, utterance_id), and JPEG frames to on_frame(jpeg_bytes).
+    Returns a threading.Event that can be set to stop the stream.
+    """
+    args = argparse.Namespace(
+        host=host, port=port, image=None, video_device=video_device,
+        audio_device=audio_device, no_audio=no_audio, input_format=input_format,
+        width=width, height=height, once=False, timeout=30, fps=fps, quality=quality,
+    )
+    stopped = threading.Event()
+
+    def _run():
+        while not stopped.is_set():
+            try:
+                with socket.create_connection((host, port), timeout=30) as sock:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+                    stream(sock, args, on_transcript=on_transcript,
+                           on_depth=on_depth, on_frame=on_frame)
+            except (OSError, EOFError, ValueError, subprocess.SubprocessError):
+                if stopped.is_set():
+                    return
+                time.sleep(1)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return stopped
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", required=True, help="laptop IP on the hotspot")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--image", type=Path, help="stream a JPEG file instead of using CSI")
+    parser.add_argument("--image", type=Path, help="stream a JPEG file instead of the webcam (no audio)")
+    parser.add_argument("--video-device", default="/dev/video0")
+    parser.add_argument("--audio-device", default="default", help="ALSA input, e.g. plughw:1,0")
+    parser.add_argument("--no-audio", action="store_true")
+    parser.add_argument("--input-format", choices=("mjpeg", "yuyv422"), default="mjpeg")
+    parser.add_argument("--width", type=int, default=640)
+    parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--fps", type=int, default=15)
@@ -162,6 +260,8 @@ def main():
         parser.error("timeout must be positive and finite")
     if not 1 <= args.fps <= 60 or not 1 <= args.quality <= 100:
         parser.error("fps must be 1–60 and quality must be 1–100")
+    if not 1 <= args.width <= 1920 or not 1 <= args.height <= 1920:
+        parser.error("width and height must be 1–1920")
     while True:
         try:
             with socket.create_connection((args.host, args.port), timeout=args.timeout) as sock:
