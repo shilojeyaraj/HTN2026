@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MapPayload } from '../types'
 
-const DEFAULT_URL = `ws://${window.location.hostname}:8766`
+// Allow WebSocket URL to be set via Vercel env var, ngrok URL, or default to localhost
+const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8766`
 
-export function useMapStream(url: string = DEFAULT_URL) {
+export function useMapStream(url: string = WS_URL) {
   const [payload, setPayload] = useState<MapPayload | null>(null)
   const [connected, setConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
