@@ -17,7 +17,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-load_dotenv()
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+load_dotenv(_env_path)
+# #region agent log
+try:
+    import json as _json, time as _time
+    with open("debug-69d821.log", "a", encoding="utf-8") as _f:
+        _f.write(_json.dumps({"sessionId": "69d821", "hypothesisId": "D", "location": "query.py:main", "message": "dotenv loaded", "data": {"env_path": _env_path, "env_exists": os.path.exists(_env_path), "has_mongodb_uri": bool(os.environ.get("MONGODB_URI")), "has_mongo_uri": bool(os.environ.get("MONGO_URI"))}, "timestamp": int(_time.time() * 1000)}) + "\n")
+except Exception:
+    pass
+# #endregion
 
 from tracking import mongo
 
