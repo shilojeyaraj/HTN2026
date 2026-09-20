@@ -7,6 +7,6 @@ requests
 python-dotenv
 matplotlib
 sounddevice
-robomaster
+robomaster-sdk-modern
 opencv-python
 websockets

@@ -70,7 +70,7 @@ class RoboMasterController:
         return self._require_module(self._gripper, "gripper")
 
     def connect(self) -> "RoboMasterController":
-        """Connect once to the robot's access point and subscribe to real telemetry."""
+        """Connect once to the robot over STA Wi-Fi and subscribe to real telemetry."""
         with self._lock:
             if self._ep is not None:
                 return self
@@ -82,8 +82,8 @@ class RoboMasterController:
                     self._robot_factory = robot.Robot
                     self._camera_module = camera
                 ep = self._robot_factory()
-                if ep.initialize(conn_type="ap") is False:
-                    raise RoboMasterError("RoboMaster SDK could not initialize AP mode")
+                if ep.initialize(conn_type="sta") is False:
+                    raise RoboMasterError("RoboMaster SDK could not initialize STA mode")
                 self._ep = ep
                 self._chassis = ep.chassis
                 self._camera = ep.camera
@@ -91,7 +91,7 @@ class RoboMasterController:
                 self._robotic_arm = getattr(ep, "robotic_arm", None)
                 self._gripper = getattr(ep, "gripper", None)
                 self._subscribe_telemetry()
-                logger.info("connected to RoboMaster EP Core in AP mode")
+                logger.info("connected to RoboMaster EP Core in STA mode")
                 return self
             except Exception as exc:
                 self._stop_safely(chassis=getattr(ep, "chassis", None))

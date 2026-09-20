@@ -119,13 +119,13 @@ def make_controller(ep):
     )
 
 
-def test_connects_once_with_ap_and_exposes_real_chassis():
+def test_connects_once_with_sta_and_exposes_real_chassis():
     ep = EP()
     controller = make_controller(ep)
 
     assert controller.connect() is controller
     assert controller.connect() is controller
-    assert ep.initialize_calls == [{"conn_type": "ap"}]
+    assert ep.initialize_calls == [{"conn_type": "sta"}]
     assert controller.chassis is ep.chassis
     assert controller.camera is ep.camera
 
