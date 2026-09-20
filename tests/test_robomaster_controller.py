@@ -141,12 +141,47 @@ def test_discrete_movements_use_chassis_move_with_expected_coordinates():
     assert controller.turn(-30) == {"status": "completed"}
 
     assert ep.chassis.moves == [
-        {"x": 0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
-        {"x": -0.5, "y": 0, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
-        {"x": 0, "y": 0.2, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
-        {"x": 0, "y": -0.2, "z": 0, "xy_speed": 0.5, "z_speed": 90.0},
-        {"x": 0, "y": 0, "z": -30, "xy_speed": 0.5, "z_speed": 90.0},
+        {"x": 0.5, "y": 0, "z": 0, "xy_speed": 0.7, "z_speed": 90.0},
+        {"x": -0.5, "y": 0, "z": 0, "xy_speed": 0.7, "z_speed": 90.0},
+        {"x": 0, "y": 0.2, "z": 0, "xy_speed": 0.7, "z_speed": 90.0},
+        {"x": 0, "y": -0.2, "z": 0, "xy_speed": 0.7, "z_speed": 90.0},
+        {"x": 0, "y": 0, "z": -30, "xy_speed": 0.7, "z_speed": 90.0},
     ]
+
+
+def test_manual_speed_overrides_still_reach_sdk():
+    ep = EP()
+    controller = make_controller(ep).connect()
+
+    controller.forward(0.2, xy_speed=0.5)
+    controller.turn(30, z_speed=60)
+
+    assert ep.chassis.moves[0]["xy_speed"] == 0.5
+    assert ep.chassis.moves[1]["z_speed"] == 60
+
+
+@pytest.mark.parametrize("name,args,coordinate,value", [
+    ("forward", {"distance_m": 2}, "x", 0.75),
+    ("turn", {"degrees": -200}, "z", -90),
+])
+def test_motion_logs_requested_clamped_speed_and_duration(name, args, coordinate, value, caplog, monkeypatch):
+    import logging
+    from brain.loop import _execute_verb
+    from brain.state import RobotState
+
+    ep = EP()
+    controller = make_controller(ep).connect()
+    ticks = iter((100.0, 101.25))
+    monkeypatch.setattr("control.robomaster.time.monotonic", lambda: next(ticks))
+
+    with caplog.at_level(logging.INFO):
+        result = _execute_verb(name, args, RobotState(scene_fresh=True), controller)
+
+    assert result["status"] == "completed"
+    assert ep.chassis.moves[0][coordinate] == value
+    assert f"Motion tool={name} requested={args!r} clamped={result['applied_args']!r}" in caplog.text
+    assert "xy_speed=0.70m/s z_speed=90.0deg/s" in caplog.text
+    assert f"chassis action={name} completed duration_s=1.25" in caplog.text
 
 
 def test_failed_move_requests_stop_before_raising():

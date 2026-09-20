@@ -16,7 +16,7 @@ def _distance_tool(name: str, description: str) -> dict:
             "description": description,
             "parameters": {
                 "type": "object",
-                "properties": {"distance_m": {"type": "number", "minimum": 0.05, "maximum": 0.5}},
+                "properties": {"distance_m": {"type": "number", "minimum": 0.05, "maximum": 0.75}},
                 "required": ["distance_m"],
             },
         },
@@ -33,7 +33,7 @@ VERBS = [
         "function": {
             "name": "turn",
             "description": "Turn in place by degrees (positive = left, negative = right), then stop.",
-            "parameters": {"type": "object", "properties": {"degrees": {"type": "number", "minimum": -45, "maximum": 45}}, "required": ["degrees"]},
+            "parameters": {"type": "object", "properties": {"degrees": {"type": "number", "minimum": -90, "maximum": 90}}, "required": ["degrees"]},
         },
     },
     {
@@ -141,7 +141,20 @@ SYSTEM_PROMPT = """You are a rescue rover: a small autonomous robot that explore
 or hard-to-reach spaces to look for people and report what you find. You receive a scene \
 description, the current goal, and any spoken command from someone nearby.
 
-Move by calling forward/backward/strafe_left/strafe_right/turn in small bounded steps. \
+Move by calling forward/backward/strafe_left/strafe_right/turn. \
+Use decisive movements appropriate to the visible scene. \
+Prefer one meaningful turn or translation over many tiny corrections. \
+When the target is clearly far away and the path appears open, use larger movements. \
+When close to a target, person, wall, or obstacle, reduce movement size for precision. \
+Avoid repeatedly issuing tiny 5–15 degree turns when a larger turn is obviously required.
+
+FAR / obvious target with a visibly open path: prefer translations of about 0.3–0.75 m \
+or turns of about 30–90 degrees. \
+NEAR target / obstacle / uncertain scene: prefer translations of about 0.05–0.25 m \
+or turns of about 5–30 degrees. \
+These are qualitative scene judgments, not measured distances; do not invent clearance \
+or translate into space that is not visibly clear. Stop if movement cannot be justified safely.
+
 Use get_state for real chassis telemetry. get_obstacles returns raw ToF readings only; do \
 not invent their direction or treat an absent reading as clear space. Never invent motor \
 commands outside the provided tools.
@@ -150,7 +163,7 @@ Request at most one physical action per scene: a chassis move, turn, arm move, \
 recenter, or gripper action. After that action, wait for fresh perception before \
 planning another physical action. Rejected or skipped tools did not execute. \
 Use exact argument names: distance_m, degrees, x_mm and y_mm, or text. \
-Keep distances within 0.05–0.5 m, turns within -45–45 degrees, and arm deltas \
+Keep distances within 0.05–0.75 m, turns within -90–90 degrees, and arm deltas \
 within -80–80 mm. If scene_fresh is false, use only non-physical tools.
 
 The camera arm moves forward/back and up/down; use turn to look left or right. Use \

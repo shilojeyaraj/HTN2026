@@ -27,12 +27,14 @@ Chassis motion is opt-in: add `--exercise-chassis` to move forward 0.2 m and tur
 ## Agent runtime
 
 ```sh
-python3 main.py --goal "Explore this room in small steps and report people or hazards."
+python3 main.py --goal "Explore this room and report people or hazards."
 ```
 
 The goal accompanies each planner decision alongside the latest scene description. The planner can call bounded `forward`, `backward`, `strafe_left`, `strafe_right`, `turn`, `stop`, `move_arm`, `recenter_arm`, `open_gripper`, and `close_gripper` tools. Motion uses `ep.chassis.move(...).wait_for_completed()`; `stop` uses `ep.chassis.drive_speed(x=0, y=0, z=0)`.
 
-Planner arguments are validated before execution: distances are clamped to 0.05–0.5 m, turns to ±45°, arm deltas to ±80 mm per axis, and speech to 240 characters. Missing/invalid arguments are logged and rejected without moving. Each perception cycle permits at most one chassis, arm, or gripper action. The remaining calls in that batch are marked skipped; tool results are submitted with fresh scene/state on the next cycle before replanning. Failed camera/vision reads block further physical actions until perception succeeds. Terminal logs include `Executing tool=... args=...` and rejection details.
+Planner arguments are validated before execution: distances are clamped to 0.05–0.75 m, turns to ±90°, arm deltas to ±80 mm per axis, and speech to 240 characters. Missing/invalid arguments are logged and rejected without moving. Each perception cycle permits at most one chassis, arm, or gripper action. The remaining calls in that batch are marked skipped; tool results are submitted with fresh scene/state on the next cycle before replanning. Failed camera/vision reads block further physical actions until perception succeeds. Terminal logs include requested and clamped arguments, chassis action and xy/z speeds, duration, and rejection details.
+
+The planner favors a meaningful translation (0.3–0.75 m) or turn (30–90°) for a far, obvious target with a visibly open path. Near targets, people, obstacles, or uncertain views call for finer translations (0.05–0.25 m) or turns (5–30°). Default chassis speeds are 0.7 m/s and 90°/s, configured by `DEFAULT_XY_SPEED_MPS` and `DEFAULT_Z_SPEED_DPS` in `control/robomaster.py`. Manual calls can still override speed; the physical smoke test retains its explicit slower 0.5 m/s translation default.
 
 `get_state` exposes only telemetry received from the RoboMaster chassis. `get_obstacles` exposes raw onboard ToF readings in millimetres, with no inferred bearing. Camera frames come from the RoboMaster stream at 360p and are retried when a transient read returns no frame.
 

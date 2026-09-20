@@ -48,6 +48,7 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
 
     # An attempted motion can change the view even if the hardware reports an error.
     if name in PHYSICAL_ACTIONS:
+        logger.info("Motion tool=%s requested=%r clamped=%r", name, args, params)
         state.scene_fresh = False
     try:
         if name == "speak":

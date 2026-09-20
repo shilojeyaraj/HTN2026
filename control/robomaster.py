@@ -10,7 +10,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_XY_SPEED_MPS = 0.5
+DEFAULT_XY_SPEED_MPS = 0.7
 DEFAULT_Z_SPEED_DPS = 90.0
 MAX_TRANSLATION_M = 1.0
 MAX_ROTATION_DEG = 180.0
@@ -163,23 +163,23 @@ class RoboMasterController:
             return {"tof_mm": self._tof_mm}
 
     def forward(self, meters: float, *, xy_speed: float = DEFAULT_XY_SPEED_MPS) -> dict:
-        return self._move(x=self._distance(meters), xy_speed=xy_speed)
+        return self._move("forward", x=self._distance(meters), xy_speed=xy_speed)
 
     def backward(self, meters: float, *, xy_speed: float = DEFAULT_XY_SPEED_MPS) -> dict:
-        return self._move(x=-self._distance(meters), xy_speed=xy_speed)
+        return self._move("backward", x=-self._distance(meters), xy_speed=xy_speed)
 
     def strafe_left(self, meters: float, *, xy_speed: float = DEFAULT_XY_SPEED_MPS) -> dict:
-        return self._move(y=self._distance(meters), xy_speed=xy_speed)
+        return self._move("strafe_left", y=self._distance(meters), xy_speed=xy_speed)
 
     def strafe_right(self, meters: float, *, xy_speed: float = DEFAULT_XY_SPEED_MPS) -> dict:
-        return self._move(y=-self._distance(meters), xy_speed=xy_speed)
+        return self._move("strafe_right", y=-self._distance(meters), xy_speed=xy_speed)
 
     def turn(self, degrees: float, *, z_speed: float = DEFAULT_Z_SPEED_DPS) -> dict:
         if not isinstance(degrees, (int, float)) or not math.isfinite(degrees) or not degrees:
             raise ValueError("degrees must be a non-zero finite number")
         if abs(degrees) > MAX_ROTATION_DEG:
             raise ValueError(f"degrees must be no more than {MAX_ROTATION_DEG}")
-        return self._move(z=degrees, z_speed=z_speed)
+        return self._move("turn", z=degrees, z_speed=z_speed)
 
     def _distance(self, meters: float) -> float:
         if not isinstance(meters, (int, float)) or not math.isfinite(meters) or meters <= 0:
@@ -188,27 +188,28 @@ class RoboMasterController:
             raise ValueError(f"meters must be no more than {MAX_TRANSLATION_M}")
         return meters
 
-    def _move(self, *, x: float = 0, y: float = 0, z: float = 0,
+    def _move(self, action: str, *, x: float = 0, y: float = 0, z: float = 0,
               xy_speed: float = DEFAULT_XY_SPEED_MPS, z_speed: float = DEFAULT_Z_SPEED_DPS) -> dict:
         if not 0.5 <= xy_speed <= 2:
             raise ValueError("xy_speed must be in [0.5, 2]")
         if not 10 <= z_speed <= 540:
             raise ValueError("z_speed must be in [10, 540]")
+        started = time.monotonic()
         try:
             logger.info(
-                "chassis move starting: x=%.2fm y=%.2fm z=%.1fdeg xy_speed=%.2fm/s z_speed=%.1fdeg/s",
-                x, y, z, xy_speed, z_speed,
+                "chassis action=%s starting: x=%.2fm y=%.2fm z=%.1fdeg xy_speed=%.2fm/s z_speed=%.1fdeg/s",
+                action, x, y, z, xy_speed, z_speed,
             )
-            started = time.monotonic()
             self.chassis.move(x=x, y=y, z=z, xy_speed=xy_speed, z_speed=z_speed).wait_for_completed()
             logger.info(
-                "chassis move completed in %.2fs; telemetry=%s",
-                time.monotonic() - started, self.get_chassis_state(),
+                "chassis action=%s completed duration_s=%.2f; telemetry=%s",
+                action, time.monotonic() - started, self.get_chassis_state(),
             )
             return {"status": "completed"}
         except Exception as exc:
             self._stop_safely()
-            logger.exception("RoboMaster movement failed; stop requested")
+            logger.exception("chassis action=%s failed duration_s=%.2f; stop requested",
+                             action, time.monotonic() - started)
             raise RoboMasterError(f"RoboMaster movement failed: {exc}") from exc
 
     def stop(self) -> dict:

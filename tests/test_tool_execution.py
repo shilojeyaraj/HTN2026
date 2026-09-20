@@ -53,7 +53,7 @@ def test_missing_degrees_is_logged_with_received_args(caplog):
 
 
 @pytest.mark.parametrize("name", ["forward", "backward", "strafe_left", "strafe_right"])
-@pytest.mark.parametrize("value,expected", [("2.5", 0.5), (0.01, 0.05), ("0.2", 0.2)])
+@pytest.mark.parametrize("value,expected", [("2.5", 0.75), (0.01, 0.05), ("0.2", 0.2), (0.6, 0.6), (0.75, 0.75)])
 def test_distances_are_coerced_and_clamped_before_hardware(name, value, expected):
     controller = Mock(spec=RoboMasterController)
     getattr(controller, name).return_value = {"status": "completed"}
@@ -69,18 +69,18 @@ def test_turn_arm_and_speech_limits_reach_the_executor(monkeypatch):
     monkeypatch.setattr(loop, "speak", speech)
 
     loop._execute_verb("turn", '{"degrees": "-200"}', RobotState(scene_fresh=True), controller)
-    controller.turn.assert_called_once_with(degrees=-45)
+    controller.turn.assert_called_once_with(degrees=-90)
     loop._execute_verb("move_arm", {"x_mm": "100", "y_mm": -200}, RobotState(scene_fresh=True), controller)
     controller.move_arm.assert_called_once_with(x_mm=80, y_mm=-80)
     loop._execute_verb("speak", {"text": "x" * 300}, RobotState(), controller)
     speech.assert_called_once_with("x" * 240)
-    assert validate_tool_args("turn", {"degrees": 200}) == {"degrees": 45}
+    assert validate_tool_args("turn", {"degrees": 200}) == {"degrees": 90}
 
 
 def test_schema_bounds_match_execution_limits():
     for name, schema in TOOL_PARAMETERS.items():
         assert schema["additionalProperties"] is False
-        for key, bounds in {"distance_m": (0.05, 0.5), "degrees": (-45, 45), "x_mm": (-80, 80), "y_mm": (-80, 80)}.items():
+        for key, bounds in {"distance_m": (0.05, 0.75), "degrees": (-90, 90), "x_mm": (-80, 80), "y_mm": (-80, 80)}.items():
             if key in schema["properties"]:
                 rule = schema["properties"][key]
                 assert (rule["minimum"], rule["maximum"]) == bounds
@@ -115,7 +115,7 @@ def mock_brain(monkeypatch, first_response, *followups):
 def test_physical_action_returns_to_perception_before_followup_planning(monkeypatch):
     planner = mock_brain(monkeypatch, response(
         tool_call("turn", '{"angle": 30}', "bad"),
-        tool_call("turn", '{"degrees": 90}', "first"),
+        tool_call("turn", '{"degrees": 190}', "first"),
         tool_call("forward", '{"distance_m": 0.4}', "skipped"),
     ), response(tool_call("forward", '{"distance_m": 0.2}', "new-plan")))
     controller = Mock(spec=RoboMasterController)
@@ -126,7 +126,7 @@ def test_physical_action_returns_to_perception_before_followup_planning(monkeypa
 
     async def two_cycles():
         await loop.run_episode(state, controller)
-        controller.turn.assert_called_once_with(degrees=45)
+        controller.turn.assert_called_once_with(degrees=90)
         controller.forward.assert_not_called()
         planner.client.submit_tool_outputs_simple.assert_not_awaited()
         assert state.last_action_result["name"] == "turn"
