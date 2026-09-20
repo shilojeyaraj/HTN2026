@@ -1,6 +1,6 @@
 import { BrainActivity } from '../components/BrainActivity'
-import { MapView } from '../components/MapView'
 import { PatternInsightsCard } from '../components/PatternInsights'
+import { RescueScene3D } from '../components/RescueScene3D'
 import { SensorGauges } from '../components/SensorGauges'
 import { Transcript } from '../components/Transcript'
 import { useMapStream } from '../hooks/useMapStream'
@@ -12,7 +12,7 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <MapView />
+        <RescueScene3D payload={payload} />
         <Transcript
           messages={activeEncounter.transcript}
           listening
