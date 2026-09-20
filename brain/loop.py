@@ -1,6 +1,7 @@
 """Deliberative episode: RoboMaster perception, planning, and bounded tool execution."""
 
 import logging
+import json
 
 from brain import command_parser
 from brain.backboard_client import brain
@@ -72,14 +73,19 @@ def run_episode(state: RobotState, controller: RoboMasterController) -> RobotSta
         if parsed is not None:
             result = _execute_verb(parsed["verb"], parsed["args"], state, controller)
             logger.info("parser fast-path: %s -> %s -> %s", state.last_user_command, parsed, result)
+            state.last_action_result = {"name": parsed["verb"], "arguments": parsed["args"], "result": result}
             state.last_user_command = None
             return state
 
-    user_content = (
-        f"Scene: {state.scene_description}\n"
-        f"Current goal: {state.current_goal}\n"
-        f"User command: {state.last_user_command}\n"
-        f"Chassis telemetry: {controller.get_chassis_state()}"
+    user_content = json.dumps(
+        {
+            "scene_description": state.scene_description,
+            "robot_pose": controller.get_chassis_state(),
+            "recent_transcript": state.last_user_command,
+            "current_goal": state.current_goal,
+            "prior_action_result": state.last_action_result,
+        },
+        default=str,
     )
     state.last_user_command = None
 
@@ -90,5 +96,7 @@ def run_episode(state: RobotState, controller: RoboMasterController) -> RobotSta
         execute_tool=lambda name, args: _execute_verb(name, args, state, controller),
         memory="Auto",
     )
+    if results:
+        state.last_action_result = results[-1]
     logger.info("episode: planner completed %d tool call(s)", len(results))
     return state

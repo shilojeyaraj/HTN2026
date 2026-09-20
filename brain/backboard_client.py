@@ -89,7 +89,7 @@ class BackboardBrain:
         return asyncio.run(self._run_tools(content, system_prompt, tools, execute_tool, memory))
 
     async def _ensure_initialized(self) -> None:
-        """Create the assistant, upload knowledge base + encounter history for RAG, load encounters into memory."""
+        """Create static assistant data without waiting for document indexing."""
         if self.assistant_id is None:
             logger.info("Backboard planner: creating assistant")
             assistant = await self.client.create_assistant(name="rescue-rover-brain")
@@ -105,18 +105,7 @@ class BackboardBrain:
                     except Exception:
                         pass
             self._knowledge_uploaded = True
-            # Wait for documents to finish indexing
-            logger.info("Backboard planner: waiting for knowledge indexing")
-            for attempt in range(30):
-                try:
-                    docs = await self.client.list_assistant_documents(self.assistant_id)
-                    if all(d.status == "completed" for d in docs):
-                        break
-                except Exception:
-                    pass
-                if attempt % 5 == 4:
-                    logger.info("Backboard planner: knowledge still indexing (%ds)", (attempt + 1) * 2)
-                await asyncio.sleep(2)
+            logger.info("Backboard planner: static knowledge upload submitted; indexing continues asynchronously")
         if not self._encounters_loaded:
             logger.info("Backboard planner: loading encounter memory")
             for enc in ENCOUNTERS:
