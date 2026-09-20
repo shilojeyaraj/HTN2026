@@ -6,8 +6,10 @@ import json
 import time
 
 from brain.backboard_client import brain
+from brain.config import STARTUP_SCAN_ENABLED, SCAN_STEP_DEG, CAMERA_SCAN_X_MM, CAMERA_SCAN_HEIGHTS_MM
 from brain.direct_commands import decompose_direct_command, parse_direct_command
 from brain.state import RobotState
+from brain.world_state import WorldState
 from brain.tools import PHYSICAL_ACTIONS, validate_decision, validate_tool_args
 from control.robomaster import RoboMasterController
 from perception.camera import get_latest_frame
@@ -36,11 +38,15 @@ def _record_turn(state: RobotState, result: dict, *, searching: bool) -> None:
     """Update estimates only from completed, validated commands, including DIRECT."""
     if result.get("status") == "error":
         state.relative_heading_deg = None  # A failed SDK action may have moved partially.
+        state.world_state.robot["heading_deg"] = None
         logger.warning("Turn failed; relative heading is now unknown")
     elif result.get("status") == "completed":
         degrees = result["applied_args"]["degrees"]
         if state.relative_heading_deg is not None:
             state.relative_heading_deg = (state.relative_heading_deg + degrees) % 360
+        heading = state.world_state.robot["heading_deg"]
+        if heading is not None:
+            state.world_state.robot["heading_deg"] = (heading + degrees) % 360
         if searching and degrees:
             state.search_direction = 1 if degrees > 0 else -1
             state.search_rotation_deg += abs(degrees)
@@ -70,6 +76,9 @@ def _mission_context(state: RobotState) -> dict:
             "search_active": state.search_active, "search_direction": state.search_direction,
             "search_rotation_deg": state.search_rotation_deg,
             "relative_heading_deg": state.relative_heading_deg,
+            "world_state": state.world_state.context(), "world_summary": state.world_state.summary(),
+            "startup_scan": {"active": state.startup_scan_status == "scanning", "step_deg": SCAN_STEP_DEG,
+                             "status": state.startup_scan_status, "rotation_deg": state.startup_scan_rotation_deg},
             "inspected_viewpoints": list(state.inspected_viewpoints)}
 
 
@@ -78,8 +87,8 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
     logger.info("Executing tool=%s args=%r", name, args)
     try:
         params = validate_tool_args(name, args)
-        # Only the local user-command router can opt out of perception. Planner
-        # callbacks never pass this flag, and tool schemas cannot supply it.
+        # Only local user commands and fixed startup camera postures may opt
+        # out of perception. Planner callbacks/schema cannot supply this flag.
         if name in PHYSICAL_ACTIONS and not direct and not state.scene_fresh:
             raise ValueError("physical action requires a fresh camera scene")
     except ValueError as exc:
@@ -90,6 +99,8 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
     if name in PHYSICAL_ACTIONS:
         logger.info("Motion tool=%s requested=%r clamped=%r", name, args, params)
         state.scene_fresh = False
+    if name in {"forward", "backward", "strafe_left", "strafe_right"}:
+        state.world_state.bearings_stale = True
     try:
         if name == "speak":
             speak(params.get("text"))
@@ -115,7 +126,85 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
         # after they leave recent action history. Never infer an absolute camera pose.
         state.last_camera_adjustment = {"name": name, "arguments": params, "result": result,
                                         "observation_before": None if direct else state.scene_description}
+        state.world_state.robot["camera_height"] = (
+            "HOME" if name == "recenter_arm" else "ADJUSTED"
+        ) if result.get("status") == "completed" else "unknown"
     return result
+
+
+def _start_startup_scan(state: RobotState, controller: RoboMasterController) -> None:
+    if (type(SCAN_STEP_DEG) not in (int, float) or not math.isfinite(SCAN_STEP_DEG)
+            or not 0 < SCAN_STEP_DEG <= 90):
+        raise ValueError("SCAN_STEP_DEG must be within (0, 90] to fit bounded turn commands")
+    if (set(CAMERA_SCAN_HEIGHTS_MM) != {"LOW", "HIGH"}
+            or any(type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= 80
+                   for value in CAMERA_SCAN_HEIGHTS_MM.values())
+            or CAMERA_SCAN_HEIGHTS_MM["LOW"] >= CAMERA_SCAN_HEIGHTS_MM["HIGH"]
+            or type(CAMERA_SCAN_X_MM) not in (int, float) or not math.isfinite(CAMERA_SCAN_X_MM)
+            or not -80 <= CAMERA_SCAN_X_MM <= 80):
+        raise ValueError("Scan camera offsets require -80 <= x <= 80 and 0 < LOW < HIGH <= 80 mm from home")
+    logger.info("Startup scan started: step_deg=%s", SCAN_STEP_DEG)
+    state.startup_scan_status = "scanning"
+    state.world_state = WorldState()
+    state.relative_heading_deg = 0.0
+    state.startup_scan_rotation_deg = 0.0
+    result = _execute_verb("recenter_arm", {}, state, controller, direct=True)
+    state.last_action_result = {"name": "recenter_arm", "arguments": {}, "result": result}
+    state.last_frame_at = max(state.last_frame_at, time.monotonic())
+    if result.get("status") != "completed":
+        _abort_startup_scan(state, controller, "camera arm homing failed")
+    logger.info("Startup scan arm homed; home is not a forward-looking camera posture")
+    _set_startup_camera(state, controller, "LOW")
+
+
+def _set_startup_camera(state: RobotState, controller: RoboMasterController, height: str) -> None:
+    previous = state.world_state.robot["camera_height"]
+    args = {"x_mm": CAMERA_SCAN_X_MM if previous == "HOME" else 0,
+            "y_mm": CAMERA_SCAN_HEIGHTS_MM[height] - CAMERA_SCAN_HEIGHTS_MM.get(previous, 0)}
+    result = _execute_verb("move_arm", args, state, controller, direct=True)
+    state.last_action_result = {"name": "move_arm", "arguments": args, "result": result}
+    state.last_frame_at = max(state.last_frame_at, time.monotonic())
+    if result.get("status") != "completed":
+        _abort_startup_scan(state, controller, f"camera {height} positioning failed")
+    state.world_state.robot["camera_height"] = height
+    logger.info("Startup scan camera moved to %s: x_mm=%s y_mm=%s from home; viewing angle uncalibrated",
+                height, CAMERA_SCAN_X_MM, CAMERA_SCAN_HEIGHTS_MM[height])
+
+
+def _abort_startup_scan(state: RobotState, controller: RoboMasterController, reason: str) -> None:
+    state.startup_scan_status = "failed"
+    _execute_verb("stop", {}, state, controller, direct=True)
+    raise InferenceUnavailable(f"Startup scan aborted: {reason}")
+
+
+def _advance_startup_scan(state: RobotState, controller: RoboMasterController) -> None:
+    # Observe both heights before each turn; twelve fresh views, six +60° turns.
+    if state.world_state.robot["camera_height"] == "LOW":
+        _set_startup_camera(state, controller, "HIGH")
+        return
+    if all(obs["view_quality"] in {"poor", "unknown"} for obs in state.world_state.observations[-2:]):
+        _abort_startup_scan(state, controller,
+                            "both LOW and HIGH views are unusable; edit CAMERA_SCAN_X_MM, CAMERA_LOW_HEIGHT_MM, "
+                            "CAMERA_HIGH_HEIGHT_MM in brain/config.py and restart")
+    degrees = min(SCAN_STEP_DEG, 360 - state.startup_scan_rotation_deg)
+    state.scene_fresh = True
+    result = _execute_verb("turn", {"degrees": degrees}, state, controller)
+    state.scene_fresh = False
+    state.last_action_result = {"name": "turn", "arguments": {"degrees": degrees}, "result": result}
+    state.last_actions.append(state.last_action_result)
+    del state.last_actions[:-8]
+    state.last_frame_at = max(state.last_frame_at, time.monotonic())
+    _record_turn(state, result, searching=False)
+    if result.get("status") != "completed":
+        _abort_startup_scan(state, controller, "turn failed; coverage is incomplete")
+    state.startup_scan_rotation_deg += result["applied_args"]["degrees"]
+    if state.startup_scan_rotation_deg >= 360:
+        state.startup_scan_status = "completed"
+        logger.info("Startup scan completed: observations=%d rotation_deg=%.1f",
+                    len(state.world_state.observations), state.startup_scan_rotation_deg)
+        logger.info("Startup scan final semantic summary: %s", state.world_state.summary())
+    else:
+        _set_startup_camera(state, controller, "LOW")
 
 
 def _execute_direct(command: dict, state: RobotState, controller: RoboMasterController) -> None:
@@ -158,6 +247,21 @@ def _execute_direct(command: dict, state: RobotState, controller: RoboMasterCont
 
 
 async def run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
+    try:
+        return await _run_episode(state, controller)
+    except BaseException as exc:
+        if state.startup_scan_status == "scanning":
+            # Cancellation or exhausted perception may interrupt a physical turn.
+            # Never resume the fixed arc with an assumed heading after that.
+            state.startup_scan_status = "failed"
+            state.world_state.robot["heading_deg"] = None
+            state.relative_heading_deg = None
+            _execute_verb("stop", {}, state, controller, direct=True)
+            logger.error("Startup scan aborted: %s", exc or "interrupted")
+        raise
+
+
+async def _run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
     logger.info("episode: starting goal=%r", state.current_goal)
     if not state.last_user_command and state.finished_goal is not None and state.finished_goal == state.current_goal:
         return state
@@ -173,6 +277,9 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             state.finished_goal = state.current_goal
             state.search_active = False
         state.last_user_command = None
+        if state.startup_scan_status == "scanning" and command["verb"] in PHYSICAL_ACTIONS:
+            # Manual motion invalidates this fixed scan; never silently resume its arc.
+            state.startup_scan_status = "failed"
         _execute_direct(command, state, controller)
         return state
 
@@ -180,9 +287,20 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
     state.scene_fresh = False
     if state.retry_at > time.monotonic():
         return state
+    if (not state.current_goal and not state.last_user_command
+            and (not STARTUP_SCAN_ENABLED or state.startup_scan_status == "completed")):
+        return state
+    if state.startup_scan_status == "failed":
+        raise InferenceUnavailable("Startup scan interrupted; start a new mission state to scan again")
+    if STARTUP_SCAN_ENABLED and state.startup_scan_status == "pending":
+        _start_startup_scan(state, controller)
+        return state
+    scanning = state.startup_scan_status == "scanning"
     try:
-        frame_jpeg = get_latest_frame(controller)
+        # Read the timestamp BEFORE copying the image, so a concurrent decoder
+        # update cannot make an older buffered image appear to be post-motion.
         camera_state = controller.get_camera_state()
+        frame_jpeg = get_latest_frame(controller)
         frame_at = camera_state.get("last_frame_monotonic_s")
         logger.info("CLOSED_LOOP frame_age_s=%s", camera_state.get("frame_age_s"))
         if (frame_jpeg is None or not isinstance(frame_at, (int, float))
@@ -191,9 +309,10 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             logger.info("CLOSED_LOOP waiting for a new valid frame; no action")
             return state
         state.last_frame_at = frame_at  # Never decide twice from the same buffered frame.
+        observed_at = time.time()
         pose = controller.get_chassis_state()
         context = {**_mission_context(state), "robot_pose": pose, "scene_fresh": True}
-        if state.current_goal is not None and state.memory_goal != state.current_goal:
+        if not scanning and state.current_goal is not None and state.memory_goal != state.current_goal:
             brain.enqueue_memory("mission_context", json.dumps(context, default=str))
             state.memory_goal = state.current_goal
         started = time.monotonic()
@@ -203,6 +322,8 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             logger.info("CLOSED_LOOP model=%s inference_latency_s=%.3f", ACTION_MODEL, time.monotonic() - started)
         try:
             decision = validate_decision(raw)
+            if scanning and "world_observation" not in decision:
+                raise ValueError("startup scan requires a semantic world_observation")
         except ValueError as exc:
             logger.error("CLOSED_LOOP malformed response=%r: %s", raw, exc)
             _retry_cycle(state, exc)
@@ -216,6 +337,27 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
         return state
 
     state.retry_at, state.consecutive_failures = 0.0, 0
+    if "world_observation" in decision:
+        state.world_state.observe(decision["observation"], decision["world_observation"], observed_at)
+    if scanning:
+        logger.info("Startup scan observation heading_deg=%s camera_height=%s view_quality=%s summary=%s",
+                    state.world_state.robot["heading_deg"], state.world_state.robot["camera_height"],
+                    decision["world_observation"]["view_quality"],
+                    decision["observation"])
+        if state.current_goal and decision["target_visible"]:
+            state.startup_scan_status = "target_found"
+            logger.info("Startup scan ended early: target visible goal=%r heading_deg=%s camera_height=%s rotation_deg=%.1f",
+                        state.current_goal, state.world_state.robot["heading_deg"],
+                        state.world_state.robot["camera_height"], state.startup_scan_rotation_deg)
+            logger.info("Startup scan final semantic summary: %s", state.world_state.summary())
+            # Fall through to normal execution using this already-validated image
+            # decision. No extra inference, scan turn, or camera change first.
+        else:
+            state.scene_description = decision["observation"]
+            state.recent_observations.append(state.scene_description)
+            del state.recent_observations[:-8]
+            _advance_startup_scan(state, controller)
+            return state
     was_searching = state.search_active
     state.search_active = (decision.get("search_active", was_searching)
                            and not decision["target_visible"] and not decision["goal_complete"])

@@ -148,6 +148,7 @@ def test_missing_or_stale_frame_blocks_autonomous_planning_and_motion(stale, str
     from brain import loop
     from brain.state import RobotState
 
+    monkeypatch.setattr(loop, "STARTUP_SCAN_ENABLED", False)
     controller, camera, ep = stream
     controller.start_camera()
     if stale:

@@ -26,6 +26,8 @@ def decision(tool="turn", args=None, **extra):
 
 @pytest.fixture
 def setup_loop(monkeypatch):
+    # These tests exercise normal mission episodes; startup has its own checks.
+    monkeypatch.setattr(loop, "STARTUP_SCAN_ENABLED", False)
     controller = Mock(spec=RoboMasterController)
     controller.get_chassis_state.return_value = {"position_m": (1, 2, 0)}
     controller.get_camera_state.side_effect = lambda: {"last_frame_monotonic_s": time.monotonic(), "frame_age_s": 0.01}

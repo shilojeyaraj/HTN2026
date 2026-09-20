@@ -11,6 +11,7 @@ from tests.test_multimodal_loop import decision, setup_loop
 
 
 def test_local_history_is_bounded_and_summaries_are_occasional(monkeypatch):
+    monkeypatch.setattr(loop, "STARTUP_SCAN_ENABLED", False)
     state = RobotState(current_goal="Find the red chair.", mission_context=["Ground floor search"])
     controller = Mock(spec=RoboMasterController)
     controller.get_chassis_state.return_value = {"position_m": (1, 2, 0)}

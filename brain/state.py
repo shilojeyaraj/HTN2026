@@ -1,8 +1,12 @@
 from dataclasses import dataclass, field
+from brain.world_state import WorldState
 
 
 @dataclass
 class RobotState:
+    world_state: WorldState = field(default_factory=WorldState)
+    startup_scan_status: str = "pending"
+    startup_scan_rotation_deg: float = 0.0
     scene_description: str | None = None
     current_goal: str | None = None
     last_user_command: str | None = None

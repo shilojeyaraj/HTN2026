@@ -12,6 +12,8 @@ pip install -r requirements.txt
 
 Connect the laptop to the RoboMaster's Wi-Fi network before running anything that initializes the robot. The controller always connects with `ep.initialize(conn_type="ap")`.
 
+Run `python main.py` to perform the startup scan, then monitor without a movement goal. Startup moves the camera arm and rotates the chassis in 60° steps. Set `STARTUP_SCAN_ENABLED = False` in `brain/config.py` for monitoring without that motion.
+
 ## Physical smoke test
 
 To diagnose chassis execution using the same controller and speeds as the application:
@@ -40,6 +42,18 @@ Chassis motion is opt-in: add `--exercise-chassis` to move forward 0.2 m and tur
 python3 main.py --goal "Explore this room and report people or hazards."
 ```
 
+Startup homes the arm, extends/raises it to LOW, and captures fresh LOW and HIGH views at each heading (0°, 60°, 120°, 180°, 240°, 300°), then turns back to 0°. If the mission's target is seen at either height, the scan ends immediately and the same Gemini response supplies the next approach/alignment action; no extra inference or remaining scan turns/heights are needed. Partial coverage remains recorded as partial. The local world state records observations and supplies historical hints to the mission planner. With no goal, monitoring follows the full scan. Direct commands still execute immediately.
+
+To tune your camera mount, edit these three values in [brain/config.py](brain/config.py), then restart `main.py`:
+
+```python
+CAMERA_SCAN_X_MM = 40       # Forward offset from home; -80 to 80 mm.
+CAMERA_LOW_HEIGHT_MM = 30   # Up from home; greater than 0.
+CAMERA_HIGH_HEIGHT_MM = 60  # Above LOW; at most 80 mm.
+```
+
+These are starting offsets, not calibrated camera angles. `recenter_arm()` homes the mechanism and may point the camera at the floor. Change offsets in small steps (for example 10 mm), inspect the camera image, and repeat. If both LOW and HIGH images are unusable, startup stops before turning and logs the settings to adjust. The camera remains at HIGH after scanning; subsequent task-specific adjustments are allowed.
+
 The goal is routed locally **before camera capture**:
 
 - **DIRECT:** exact motion commands are parsed once, split into bounded local tool calls, executed once, and the application exits. There are no camera, Gemini, Backboard, or Baseten calls for these commands. Every chunk still passes through the existing argument validator and RoboMaster controller. A failed chunk stops the maneuver; Ctrl+C requests a stop and closes the connection.
@@ -62,7 +76,7 @@ The goal accompanies each multimodal decision alongside the current JPEG and loc
 
 Planner arguments are validated before execution: distances are clamped to 0.05–0.75 m, turns to ±90°, arm deltas to ±80 mm per axis, and speech to 240 characters. Missing/invalid arguments are logged and rejected without moving. Each response must contain one observation/target_visible/tool/args/goal_complete/finding object, with an optional boolean search_active. The entire response is validated before execution; malformed responses are logged verbatim and cause no movement. Each fresh frame authorizes at most one action. After a physical action, the next accepted frame must have arrived after that action finished. Failed camera/model reads block movement, and goal_complete=true requires a null tool and terminates the mission. Terminal logs include requested and clamped arguments, chassis action and xy/z speeds, duration, and rejection details.
 
-Search history guides the planner without overriding its actions. `RobotState.search_active`, `search_direction` (+1 left / -1 right), and `search_rotation_deg` track completed, clamped search turns. Each decision also receives `relative_heading_deg` and the last 36 `inspected_viewpoints`, including pose, observation, and target visibility before each action. Headings are command-based estimates relative to the goal's starting view, not compass telemetry; a failed turn makes the estimate unknown. Rotation totals include revisited arcs and do not prove coverage. The planner should continue a useful search direction, but can adjust the camera, reposition, or reverse when evidence warrants it. There is no forced 60° turn or automatic termination at 360°. Detection ends active searching while preserving view history; a new goal resets that history. Completion is model-selected and stops further actions. DIRECT commands retain local decomposition without perception; direct turns update the heading estimate without claiming an inspected view.
+After startup, search history guides the planner without overriding its actions. `RobotState.search_active`, `search_direction` (+1 left / -1 right), and `search_rotation_deg` track completed, clamped search turns. Each decision also receives `relative_heading_deg` and the last 36 `inspected_viewpoints`, including pose, observation, and target visibility before each action. Headings are command-based estimates relative to the goal's starting view, not compass telemetry; a failed turn makes the estimate unknown. Rotation totals include revisited arcs and do not prove coverage. The planner should continue a useful search direction, but can adjust the camera, reposition, or reverse when evidence warrants it. There is no forced 60° turn or automatic termination at 360°. Detection ends active searching while preserving view history; a new goal resets that history. Completion is model-selected and stops further actions. DIRECT commands retain local decomposition without perception; direct turns update the heading estimate without claiming an inspected view.
 
 The planner favors meaningful movements when the goal and view are clear, with finer corrections near people, obstacles, and targets. A poor camera view should be improved before navigating. Default chassis speeds are 0.7 m/s and 90°/s, configured by `DEFAULT_XY_SPEED_MPS` and `DEFAULT_Z_SPEED_DPS` in `control/robomaster.py`. Manual calls can still override speed; the physical smoke test retains its explicit slower 0.5 m/s translation default.
 
