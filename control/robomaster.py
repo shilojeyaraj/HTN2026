@@ -14,6 +14,9 @@ DEFAULT_XY_SPEED_MPS = 0.5
 DEFAULT_Z_SPEED_DPS = 30.0
 MAX_TRANSLATION_M = 1.0
 MAX_ROTATION_DEG = 180.0
+MAX_ARM_DELTA_MM = 80.0
+DEFAULT_GRIPPER_POWER = 25
+DEFAULT_GRIPPER_DWELL_S = 0.5
 CAMERA_WARMUP_S = 0.3
 CAMERA_RETRIES = 3
 
@@ -38,6 +41,8 @@ class RoboMasterController:
         self._chassis = None
         self._camera = None
         self._sensor = None
+        self._robotic_arm = None
+        self._gripper = None
         self._camera_started = False
         self._camera_start_attempted = False
         self._position_m = None
@@ -55,6 +60,14 @@ class RoboMasterController:
     def camera(self):
         self._require_connected()
         return self._camera
+
+    @property
+    def robotic_arm(self):
+        return self._require_module(self._robotic_arm, "robotic arm")
+
+    @property
+    def gripper(self):
+        return self._require_module(self._gripper, "gripper")
 
     def connect(self) -> "RoboMasterController":
         """Connect once to the robot's access point and subscribe to real telemetry."""
@@ -75,6 +88,8 @@ class RoboMasterController:
                 self._chassis = ep.chassis
                 self._camera = ep.camera
                 self._sensor = getattr(ep, "sensor", None)
+                self._robotic_arm = getattr(ep, "robotic_arm", None)
+                self._gripper = getattr(ep, "gripper", None)
                 self._subscribe_telemetry()
                 logger.info("connected to RoboMaster EP Core in AP mode")
                 return self
@@ -86,6 +101,7 @@ class RoboMasterController:
                     except Exception:
                         logger.debug("RoboMaster cleanup after failed connect also failed", exc_info=True)
                 self._ep = self._chassis = self._camera = self._sensor = None
+                self._robotic_arm = self._gripper = None
                 raise RoboMasterError(f"failed to connect to RoboMaster: {exc}") from exc
 
     def _subscribe_telemetry(self) -> None:
@@ -194,6 +210,62 @@ class RoboMasterController:
             logger.exception("RoboMaster stop command failed")
             raise RoboMasterError(f"RoboMaster stop failed: {exc}") from exc
 
+    def move_arm(self, x_mm: float = 0, y_mm: float = 0) -> dict:
+        """Move the arm relative to its current position: forward/up are positive."""
+        x_mm = self._arm_delta("x_mm", x_mm)
+        y_mm = self._arm_delta("y_mm", y_mm)
+        if not x_mm and not y_mm:
+            raise ValueError("move_arm requires a non-zero x_mm or y_mm")
+        try:
+            self.robotic_arm.move(x=x_mm, y=y_mm).wait_for_completed()
+            return {"status": "completed"}
+        except Exception as exc:
+            self._stop_arm_safely()
+            logger.exception("RoboMaster arm movement failed")
+            raise RoboMasterError(f"RoboMaster arm movement failed: {exc}") from exc
+
+    def recenter_arm(self) -> dict:
+        try:
+            self.robotic_arm.recenter().wait_for_completed()
+            return {"status": "completed"}
+        except Exception as exc:
+            self._stop_arm_safely()
+            logger.exception("RoboMaster arm recenter failed")
+            raise RoboMasterError(f"RoboMaster arm recenter failed: {exc}") from exc
+
+    def open_gripper(self, *, power: int = DEFAULT_GRIPPER_POWER,
+                     dwell_s: float = DEFAULT_GRIPPER_DWELL_S) -> dict:
+        return self._actuate_gripper("open", power, dwell_s)
+
+    def close_gripper(self, *, power: int = DEFAULT_GRIPPER_POWER,
+                      dwell_s: float = DEFAULT_GRIPPER_DWELL_S) -> dict:
+        return self._actuate_gripper("close", power, dwell_s)
+
+    def _arm_delta(self, name: str, value: float) -> float:
+        if not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"{name} must be a finite number")
+        if abs(value) > MAX_ARM_DELTA_MM:
+            raise ValueError(f"{name} must be no more than {MAX_ARM_DELTA_MM} mm per move")
+        return float(value)
+
+    def _actuate_gripper(self, command: str, power: int, dwell_s: float) -> dict:
+        if not isinstance(power, int) or not 1 <= power <= 100:
+            raise ValueError("gripper power must be an integer in [1, 100]")
+        if not isinstance(dwell_s, (int, float)) or not math.isfinite(dwell_s) or dwell_s <= 0:
+            raise ValueError("gripper dwell_s must be a positive finite number")
+        try:
+            if getattr(self.gripper, command)(power=power) is False:
+                raise RoboMasterError(f"RoboMaster gripper {command} command was rejected")
+            self._sleep(dwell_s)
+            return {"status": "completed"}
+        except RoboMasterError:
+            raise
+        except Exception as exc:
+            logger.exception("RoboMaster gripper %s failed", command)
+            raise RoboMasterError(f"RoboMaster gripper {command} failed: {exc}") from exc
+        finally:
+            self._pause_gripper_safely()
+
     def _start_camera(self) -> bool:
         with self._lock:
             if self._camera_start_attempted:
@@ -242,23 +314,45 @@ class RoboMasterController:
             raise RoboMasterError("RoboMaster is not connected; call connect() once at startup")
         return self._ep
 
+    def _require_module(self, module, name: str):
+        self._require_connected()
+        if module is None:
+            raise RoboMasterError(f"RoboMaster {name} module is unavailable")
+        return module
+
     def _stop_safely(self, chassis=None) -> None:
         try:
             (chassis or self._chassis).drive_speed(x=0, y=0, z=0)
         except Exception:
             logger.debug("best-effort RoboMaster stop failed", exc_info=True)
 
+    def _stop_arm_safely(self) -> None:
+        try:
+            self.robotic_arm.stop()
+        except Exception:
+            logger.debug("best-effort RoboMaster arm stop failed", exc_info=True)
+
+    def _pause_gripper_safely(self, gripper=None) -> None:
+        try:
+            (gripper or self._gripper).pause()
+        except Exception:
+            logger.debug("best-effort RoboMaster gripper pause failed", exc_info=True)
+
     def close(self) -> None:
         """Stop motion, stop video, unsubscribe telemetry, and release the SDK connection."""
         with self._lock:
-            ep, chassis, camera, sensor = self._ep, self._chassis, self._camera, self._sensor
+            ep, chassis, camera, sensor, gripper = (
+                self._ep, self._chassis, self._camera, self._sensor, self._gripper,
+            )
             camera_started = self._camera_started
             self._ep = self._chassis = self._camera = self._sensor = None
+            self._robotic_arm = self._gripper = None
             self._camera_started = False
             self._camera_start_attempted = False
         if ep is None:
             return
         self._stop_safely(chassis)
+        self._pause_gripper_safely(gripper)
         if camera_started:
             try:
                 camera.stop_video_stream()

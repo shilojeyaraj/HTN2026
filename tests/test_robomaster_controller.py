@@ -56,10 +56,46 @@ class Camera:
         self.stopped = True
 
 
+class RoboticArm:
+    def __init__(self):
+        self.moves = []
+        self.recentered = 0
+
+    def move(self, **kwargs):
+        self.moves.append(kwargs)
+        return Action()
+
+    def recenter(self):
+        self.recentered += 1
+        return Action()
+
+    def stop(self):
+        pass
+
+
+class Gripper:
+    def __init__(self):
+        self.calls = []
+
+    def open(self, *, power):
+        self.calls.append(("open", power))
+        return True
+
+    def close(self, *, power):
+        self.calls.append(("close", power))
+        return True
+
+    def pause(self):
+        self.calls.append(("pause", None))
+        return True
+
+
 class EP:
     def __init__(self, frames=()):
         self.chassis = Chassis()
         self.camera = Camera(frames)
+        self.robotic_arm = RoboticArm()
+        self.gripper = Gripper()
         self.sensor = SimpleNamespace(
             sub_distance=lambda freq, callback: setattr(self, "tof_callback", callback),
             unsub_distance=lambda: None,
@@ -122,6 +158,22 @@ def test_failed_move_requests_stop_before_raising():
         controller.forward(0.2)
 
     assert ep.chassis.stops[-1] == {"x": 0, "y": 0, "z": 0}
+
+
+def test_arm_and_gripper_commands_use_the_sdk_modules():
+    ep = EP()
+    controller = make_controller(ep).connect()
+
+    assert controller.move_arm(40, 30) == {"status": "completed"}
+    assert controller.recenter_arm() == {"status": "completed"}
+    assert controller.open_gripper(power=25, dwell_s=0.1) == {"status": "completed"}
+    assert controller.close_gripper(power=25, dwell_s=0.1) == {"status": "completed"}
+
+    assert ep.robotic_arm.moves == [{"x": 40.0, "y": 30.0}]
+    assert ep.robotic_arm.recentered == 1
+    assert ep.gripper.calls == [
+        ("open", 25), ("pause", None), ("close", 25), ("pause", None),
+    ]
 
 
 def test_camera_retries_queue_empty_then_returns_newest_frame_and_closes():
