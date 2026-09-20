@@ -3,6 +3,7 @@
 import logging
 import math
 import json
+import re
 import time
 
 from brain.backboard_client import brain
@@ -20,6 +21,49 @@ logger = logging.getLogger(__name__)
 
 MAX_MODEL_FAILURES = 5
 MEMORY_SUMMARY_INTERVAL = 10
+SEARCH_TURN_DEG = 60.0
+
+
+def _reset_search(state: RobotState) -> None:
+    state.search_active = False
+    state.search_direction = 0
+    state.search_rotation_deg = 0.0
+    state.search_goal = None
+
+
+def _search_decision(state: RobotState, decision: dict) -> tuple[dict, bool]:
+    """Replace unseen-target motion with one scan step; keep explicit safety stops."""
+    if decision["target_visible"]:
+        logger.info("Search target detected: goal=%r cumulative_deg=%.1f", state.current_goal, state.search_rotation_deg)
+        _reset_search(state)
+        return decision, False
+    if state.search_active and state.search_rotation_deg >= 360:
+        # This decision used a fresh frame AFTER the final turn, so the last sector
+        # also got inspected before declaring the scan exhausted.
+        logger.info("Search full 360 scan completed: target not found goal=%r", state.current_goal)
+        _reset_search(state)
+        state.finished_goal = state.current_goal  # Do not restart on the next cycle.
+        if decision["tool"] == "stop":
+            return decision, False
+        return {**decision, "goal_complete": False, "tool": "speak", "args": {
+            "text": "Target not found after a full 360-degree scan."
+        }}, False
+    if decision["goal_complete"]:
+        raise ValueError("search goal cannot be complete while target_visible=false")
+    if decision["tool"] == "stop":
+        return decision, False
+    if not math.isfinite(SEARCH_TURN_DEG) or SEARCH_TURN_DEG <= 0:
+        raise ValueError("SEARCH_TURN_DEG must be finite and positive")
+    if not state.search_active:
+        state.search_active = True
+        state.search_direction = 1  # Choose left once; the model cannot reverse it.
+        state.search_rotation_deg = 0.0
+        state.search_goal = state.current_goal
+        logger.info("Search started: goal=%r direction=left cumulative_deg=0", state.current_goal)
+    args = validate_tool_args("turn", {"degrees": state.search_direction * min(
+        SEARCH_TURN_DEG, 360 - state.search_rotation_deg,
+    )})
+    return {**decision, "tool": "turn", "args": args}, True
 
 
 def _retry_cycle(state: RobotState, error, retry_after=None) -> None:
@@ -39,7 +83,9 @@ def _mission_context(state: RobotState) -> dict:
     return {"current_goal": state.current_goal, "recent_transcript": state.last_user_command,
             "recent_observations": state.recent_observations[-8:], "findings": state.findings[-24:],
             "last_actions": state.last_actions[-8:], "prior_action_result": state.last_action_result,
-            "mission_context": state.mission_context[-8:]}
+            "mission_context": state.mission_context[-8:],
+            "search_active": state.search_active, "search_direction": state.search_direction,
+            "search_rotation_deg": state.search_rotation_deg}
 
 
 def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterController, *, direct: bool = False) -> dict:
@@ -133,6 +179,12 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
         return state
 
     logger.info("execution mode=CLOSED_LOOP")
+    if state.search_goal != state.current_goal:
+        _reset_search(state)
+    rotational_search = bool(re.match(
+        r"^(?:please\s+)?(?:find|locate|search|look\s+for)\b\s+\S",
+        (state.current_goal or "").strip(), re.IGNORECASE,
+    ))
     state.scene_fresh = False
     if state.retry_at > time.monotonic():
         return state
@@ -148,7 +200,8 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             return state
         state.last_frame_at = frame_at  # Never decide twice from the same buffered frame.
         pose = controller.get_chassis_state()
-        context = {**_mission_context(state), "robot_pose": pose, "scene_fresh": True}
+        context = {**_mission_context(state), "robot_pose": pose, "scene_fresh": True,
+                   "rotational_search": rotational_search}
         if state.current_goal is not None and state.memory_goal != state.current_goal:
             brain.enqueue_memory("mission_context", json.dumps(context, default=str))
             state.memory_goal = state.current_goal
@@ -159,6 +212,9 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             logger.info("CLOSED_LOOP model=%s inference_latency_s=%.3f", ACTION_MODEL, time.monotonic() - started)
         try:
             decision = validate_decision(raw)
+            scan_turn = False
+            if rotational_search:
+                decision, scan_turn = _search_decision(state, decision)
         except ValueError as exc:
             logger.error("CLOSED_LOOP malformed response=%r: %s", raw, exc)
             _retry_cycle(state, exc)
@@ -178,6 +234,7 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
     state.last_user_command = None
     name, args = decision["tool"], decision["args"]
     logger.info("CLOSED_LOOP observation=%s", decision["observation"])
+    logger.info("CLOSED_LOOP target_visible=%s", decision["target_visible"])
     logger.info("CLOSED_LOOP selected tool=%s args=%r goal_complete=%s", name, args, decision["goal_complete"])
     finding = decision["finding"]
     if finding is not None and finding not in state.findings:
@@ -198,11 +255,16 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
         if name in PHYSICAL_ACTIONS:
             # The next frame must arrive after the attempted motion has finished.
             state.last_frame_at = max(state.last_frame_at, time.monotonic())
+        if scan_turn and result.get("status") == "completed":
+            state.search_rotation_deg += abs(result["applied_args"]["degrees"])
+            logger.info("Search direction=%s cumulative_deg=%.1f/360",
+                        "left" if state.search_direction > 0 else "right", state.search_rotation_deg)
         if result.get("status") in {"error", "rejected"}:
             _retry_cycle(state, result.get("detail", "tool failed"))
     logger.info("CLOSED_LOOP executor_duration_s=%.3f", time.monotonic() - started)
     state.successful_cycles += 1
-    if decision["goal_complete"] or state.successful_cycles % MEMORY_SUMMARY_INTERVAL == 0:
+    if ((state.finished_goal is not None and state.finished_goal == state.current_goal)
+            or state.successful_cycles % MEMORY_SUMMARY_INTERVAL == 0):
         brain.enqueue_memory("mission_summary", json.dumps({**_mission_context(state),
                                                             "goal_complete": decision["goal_complete"]}, default=str))
     return state
