@@ -114,31 +114,24 @@ def test_transient_retries_are_bounded_and_stay_in_one_planner_call(monkeypatch)
     assert {r.kwargs["content"] for r in planner.client.send_message.call_args_list} == {"one scene"}
 
 
-def test_continuation_rate_limit_replans_without_resubmitting_consumed_outputs(monkeypatch):
+def test_continuation_rate_limit_does_not_resubmit_consumed_outputs(monkeypatch):
     planner = planner_with(response(tool_call("turn", '{"degrees": 20}', "first")),
                            response(tool_call("forward", '{"distance_m": 0.2}', "next")))
     planner.client.submit_tool_outputs_simple = AsyncMock(return_value=failed(DAILY))
-    monkeypatch.setattr(loop, "brain", planner)
-    camera = Mock(return_value=b"jpeg")
-    perceive = Mock(side_effect=["Before turn", "After turn"])
-    monkeypatch.setattr(loop, "get_latest_frame", camera)
-    monkeypatch.setattr(loop, "describe_scene", perceive)
     controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
     controller.turn.return_value = controller.forward.return_value = {"status": "completed"}
-
+    state = RobotState(scene_fresh=True)
     async def run():
-        state = await loop.run_episode(RobotState(current_goal="Explore"), controller)
-        await loop.run_episode(state, controller)
-
+        execute = lambda name, args: loop._execute_verb(name, args, state, controller)
+        await planner.run_tools("Before turn", "prompt", [], execute)
+        state.scene_fresh = True
+        await planner.run_tools("After turn", "prompt", [], execute)
     asyncio.run(run())
     controller.turn.assert_called_once_with(degrees=20)
     controller.forward.assert_called_once_with(0.2)
     planner.client.submit_tool_outputs_simple.assert_awaited_once()
-    assert camera.call_count == perceive.call_count == 2
     retry = planner.client.send_message.call_args.kwargs
-    assert retry["thread_id"] == "thread"
-    assert retry["model_name"] == "gpt-4.1-mini"
+    assert retry["thread_id"] == "thread" and retry["model_name"] == "gpt-4.1-mini"
     assert "After turn" in retry["content"] and "Already processed tool results" in retry["content"]
     assert planner._pending_tool_outputs[0]["tool_call_id"] == "next"
 
@@ -197,12 +190,12 @@ def test_mission_shutdown_stops_robot_and_closes_clients_on_exhaustion(monkeypat
     controller.__enter__.return_value = controller
     planner = SimpleNamespace(aclose=AsyncMock())
     episode = AsyncMock(side_effect=InferenceUnavailable("daily quota exhausted"))
-    close_vision = Mock()
+    close_vision = AsyncMock()
     monkeypatch.setattr("sys.argv", ["main.py", "--goal", "Test"])
     monkeypatch.setattr(main, "RoboMasterController", lambda: controller)
     monkeypatch.setattr(main, "brain", planner)
     monkeypatch.setattr(main, "run_episode", episode)
-    monkeypatch.setattr(main, "close_vision_client", close_vision)
+    monkeypatch.setattr(main, "aclose_vision_client", close_vision)
 
     asyncio.run(main.main())
 
@@ -210,4 +203,4 @@ def test_mission_shutdown_stops_robot_and_closes_clients_on_exhaustion(monkeypat
     controller.stop.assert_called_once()
     controller.__exit__.assert_called_once()
     planner.aclose.assert_awaited_once()
-    close_vision.assert_called_once()
+    close_vision.assert_awaited_once()

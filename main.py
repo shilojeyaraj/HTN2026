@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import time
 
 from dotenv import load_dotenv
 
@@ -12,11 +13,8 @@ from brain.loop import run_episode
 from brain.backboard_client import brain
 from brain.state import RobotState
 from control.robomaster import RoboMasterController
-from perception.vision import close_vision_client, vision_retry_delay, vision_unavailable_reason
+from perception.vision import aclose_vision_client
 from shared.inference import InferenceUnavailable
-
-EPISODE_GAP_S = 1.0
-
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -35,11 +33,10 @@ async def main() -> None:
                     state = await run_episode(state, controller)
                     if state.finished_goal is not None and state.finished_goal == state.current_goal:
                         break
-                    if reason := vision_unavailable_reason():
-                        raise InferenceUnavailable(reason)
-                    delay = max(EPISODE_GAP_S, vision_retry_delay())
-                    logging.getLogger(__name__).info("episode: next camera cycle in %.1fs", delay)
-                    await asyncio.sleep(delay)
+                    delay = max(0.0, state.retry_at - time.monotonic())
+                    if delay:
+                        logging.getLogger(__name__).info("episode: transient failure; retry in %.2fs", delay)
+                        await asyncio.sleep(delay)
             except InferenceUnavailable as exc:
                 logging.getLogger(__name__).error("Mission stopped: %s", exc)
                 controller.stop()
@@ -47,7 +44,7 @@ async def main() -> None:
         try:
             await brain.aclose()
         finally:
-            close_vision_client()
+            await aclose_vision_client()
 
 
 if __name__ == "__main__":

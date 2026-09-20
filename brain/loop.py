@@ -1,39 +1,45 @@
 """Deliberative episode: RoboMaster perception, planning, and bounded tool execution."""
 
 import logging
+import math
 import json
 import time
 
 from brain.backboard_client import brain
 from brain.direct_commands import decompose_direct_command, parse_direct_command
 from brain.state import RobotState
-from brain.tools import PHYSICAL_ACTIONS, SYSTEM_PROMPT, VERBS, validate_tool_args
+from brain.tools import PHYSICAL_ACTIONS, validate_decision, validate_tool_args
 from control.robomaster import RoboMasterController
 from perception.camera import get_latest_frame
-from perception.vision import describe_scene
+from perception.vision import ACTION_MODEL, decide_action
+from shared.inference import InferenceUnavailable, is_daily_quota, is_rate_limited, retry_delay
 from voice.tts import speak
 
 logger = logging.getLogger(__name__)
 
 
-def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState:
+MAX_MODEL_FAILURES = 5
+MEMORY_SUMMARY_INTERVAL = 10
+
+
+def _retry_cycle(state: RobotState, error, retry_after=None) -> None:
     state.scene_fresh = False
-    try:
-        logger.info("perception: requesting latest camera frame")
-        frame_jpeg = get_latest_frame(controller)
-        if frame_jpeg is None:
-            logger.warning("RoboMaster camera did not provide a frame")
-        else:
-            logger.info("perception: received %d-byte JPEG", len(frame_jpeg))
-            description = describe_scene(frame_jpeg)
-            if description:
-                state.scene_description = description
-                state.scene_fresh = True
-            else:
-                logger.warning("vision returned no scene description; keeping prior scene")
-    except Exception:
-        logger.warning("vision failed, keeping prior scene_description", exc_info=True)
-    return state
+    if is_daily_quota(error):
+        raise InferenceUnavailable(f"Multimodal quota exhausted: {error}")
+    state.consecutive_failures += 1
+    if state.consecutive_failures > MAX_MODEL_FAILURES:
+        raise InferenceUnavailable(f"Multimodal decision failed after {MAX_MODEL_FAILURES} retries: {error}")
+    delay = (retry_delay(error, state.consecutive_failures - 1, retry_after) if is_rate_limited(error)
+             else min(0.5 * 2 ** (state.consecutive_failures - 1), 8.0))
+    state.retry_at = time.monotonic() + delay
+    logger.warning("CLOSED_LOOP retry=%d delay_s=%.2f; no action: %s", state.consecutive_failures, delay, error)
+
+
+def _mission_context(state: RobotState) -> dict:
+    return {"current_goal": state.current_goal, "recent_transcript": state.last_user_command,
+            "recent_observations": state.recent_observations[-8:], "findings": state.findings[-24:],
+            "last_actions": state.last_actions[-8:], "prior_action_result": state.last_action_result,
+            "mission_context": state.mission_context[-8:]}
 
 
 def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterController, *, direct: bool = False) -> dict:
@@ -127,33 +133,76 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
         return state
 
     logger.info("execution mode=CLOSED_LOOP")
-    state = _perceive(state, controller)
-
-    if not state.scene_fresh:
-        logger.warning("episode: waiting for valid vision; skipping planner and movement")
+    state.scene_fresh = False
+    if state.retry_at > time.monotonic():
+        return state
+    try:
+        frame_jpeg = get_latest_frame(controller)
+        camera_state = controller.get_camera_state()
+        frame_at = camera_state.get("last_frame_monotonic_s")
+        logger.info("CLOSED_LOOP frame_age_s=%s", camera_state.get("frame_age_s"))
+        if (frame_jpeg is None or not isinstance(frame_at, (int, float))
+                or not math.isfinite(frame_at) or frame_at <= state.last_frame_at):
+            state.retry_at = time.monotonic() + 0.1
+            logger.info("CLOSED_LOOP waiting for a new valid frame; no action")
+            return state
+        state.last_frame_at = frame_at  # Never decide twice from the same buffered frame.
+        pose = controller.get_chassis_state()
+        context = {**_mission_context(state), "robot_pose": pose, "scene_fresh": True}
+        if state.current_goal is not None and state.memory_goal != state.current_goal:
+            brain.enqueue_memory("mission_context", json.dumps(context, default=str))
+            state.memory_goal = state.current_goal
+        started = time.monotonic()
+        try:
+            raw = await decide_action(frame_jpeg, context)
+        finally:
+            logger.info("CLOSED_LOOP model=%s inference_latency_s=%.3f", ACTION_MODEL, time.monotonic() - started)
+        try:
+            decision = validate_decision(raw)
+        except ValueError as exc:
+            logger.error("CLOSED_LOOP malformed response=%r: %s", raw, exc)
+            _retry_cycle(state, exc)
+            return state
+    except InferenceUnavailable:
+        raise
+    except Exception as exc:
+        logger.warning("CLOSED_LOOP model/frame failure: %s", exc)
+        response = getattr(exc, "response", None)
+        _retry_cycle(state, exc, response.headers.get("Retry-After") if response is not None else None)
         return state
 
-    user_content = json.dumps(
-        {
-            "scene_description": state.scene_description,
-            "scene_fresh": state.scene_fresh,
-            "robot_pose": controller.get_chassis_state(),
-            "recent_transcript": state.last_user_command,
-            "current_goal": state.current_goal,
-            "prior_action_result": state.last_action_result,
-        },
-        default=str,
-    )
+    state.retry_at, state.consecutive_failures = 0.0, 0
+    state.scene_description = decision["observation"]
+    state.recent_observations.append(decision["observation"])
+    del state.recent_observations[:-8]
     state.last_user_command = None
-
-    results = await brain.run_tools(
-        content=user_content,
-        system_prompt=SYSTEM_PROMPT,
-        tools=VERBS,
-        execute_tool=lambda name, args: _execute_verb(name, args, state, controller),
-        memory="Auto",
-    )
-    if results:
-        state.last_action_result = results[-1]
-    logger.info("episode: planner completed %d tool call(s)", len(results))
+    name, args = decision["tool"], decision["args"]
+    logger.info("CLOSED_LOOP observation=%s", decision["observation"])
+    logger.info("CLOSED_LOOP selected tool=%s args=%r goal_complete=%s", name, args, decision["goal_complete"])
+    finding = decision["finding"]
+    if finding is not None and finding not in state.findings:
+        state.findings.append(finding)
+        del state.findings[:-24]
+        brain.enqueue_memory(finding["type"], json.dumps({"goal": state.current_goal, "finding": finding,
+                                                        "robot_pose": pose}, default=str))
+    started = time.monotonic()
+    if decision["goal_complete"]:
+        state.finished_goal = state.current_goal
+    elif name is not None:
+        state.scene_fresh = True
+        result = _execute_verb(name, args, state, controller)
+        state.scene_fresh = False
+        state.last_action_result = {"name": name, "arguments": args, "result": result}
+        state.last_actions.append(state.last_action_result)
+        del state.last_actions[:-8]
+        if name in PHYSICAL_ACTIONS:
+            # The next frame must arrive after the attempted motion has finished.
+            state.last_frame_at = max(state.last_frame_at, time.monotonic())
+        if result.get("status") in {"error", "rejected"}:
+            _retry_cycle(state, result.get("detail", "tool failed"))
+    logger.info("CLOSED_LOOP executor_duration_s=%.3f", time.monotonic() - started)
+    state.successful_cycles += 1
+    if decision["goal_complete"] or state.successful_cycles % MEMORY_SUMMARY_INTERVAL == 0:
+        brain.enqueue_memory("mission_summary", json.dumps({**_mission_context(state),
+                                                            "goal_complete": decision["goal_complete"]}, default=str))
     return state

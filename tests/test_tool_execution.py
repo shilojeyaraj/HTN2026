@@ -99,139 +99,21 @@ def response(*calls):
     }])
 
 
-def mock_brain(monkeypatch, first_response, *followups):
+@pytest.mark.parametrize("bad_call", [
+    tool_call("turn", "{bad json", "bad"), tool_call("turn", "[]", "bad"),
+    {"id": "bad", "function": None}, {"id": "bad", "function": {"name": []}},
+])
+def test_optional_backboard_planner_still_rejects_malformed_calls(bad_call):
     planner = BackboardBrain("google", "test-model")
     planner.assistant_id = "assistant"
-    planner.client = SimpleNamespace(
-        send_message=AsyncMock(return_value=first_response),
-        submit_tool_outputs_simple=AsyncMock(side_effect=followups),
-    )
-    monkeypatch.setattr(loop, "brain", planner)
-    monkeypatch.setattr(loop, "get_latest_frame", Mock(return_value=b"jpeg"))
-    monkeypatch.setattr(loop, "describe_scene", Mock(return_value="Fresh scene"))
-    return planner
-
-
-def test_physical_action_returns_to_perception_before_followup_planning(monkeypatch):
-    planner = mock_brain(monkeypatch, response(
-        tool_call("turn", '{"angle": 30}', "bad"),
-        tool_call("turn", '{"degrees": 190}', "first"),
-        tool_call("forward", '{"distance_m": 0.4}', "skipped"),
-    ), response(tool_call("forward", '{"distance_m": 0.2}', "new-plan")))
+    planner.client = SimpleNamespace(send_message=AsyncMock(return_value=response(bad_call)),
+                                    submit_tool_outputs_simple=AsyncMock(return_value=response()))
     controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-    controller.turn.return_value = controller.forward.return_value = {"status": "completed"}
-    monkeypatch.setattr(loop, "describe_scene", Mock(side_effect=["Before turn", "After turn"]))
-    state = RobotState(current_goal="Explore")
-
-    async def two_cycles():
-        await loop.run_episode(state, controller)
-        controller.turn.assert_called_once_with(degrees=90)
-        controller.forward.assert_not_called()
-        planner.client.submit_tool_outputs_simple.assert_not_awaited()
-        assert state.last_action_result["name"] == "turn"
-        assert not state.scene_fresh
-
-        async def resume(**kwargs):
-            assert loop.describe_scene.call_count == 2
-            assert state.scene_description == "After turn"
-            outputs = kwargs["tool_outputs"]
-            assert [json.loads(out["output"])["status"] for out in outputs] == ["rejected", "completed", "skipped"]
-            fresh_state = json.loads(json.loads(outputs[-1]["output"])["current_scene_and_state"])
-            assert fresh_state["scene_description"] == "After turn"
-            assert fresh_state["scene_fresh"]
-            return response(tool_call("forward", '{"distance_m": 0.2}', "new-plan"))
-
-        planner.client.submit_tool_outputs_simple.side_effect = resume
-        await loop.run_episode(state, controller)
-        controller.forward.assert_called_once_with(0.2)
-        assert state.last_action_result["name"] == "forward"
-        planner.client.send_message.assert_awaited_once()
-        planner.client.submit_tool_outputs_simple.assert_awaited_once()
-
-    asyncio.run(two_cycles())
-
-
-@pytest.mark.parametrize("name,args", [
-    ("forward", {"distance_m": 0.2}), ("backward", {"distance_m": 0.2}),
-    ("strafe_left", {"distance_m": 0.2}), ("strafe_right", {"distance_m": 0.2}),
-    ("turn", {"degrees": 30}), ("move_arm", {"x_mm": 10, "y_mm": 0}),
-    ("recenter_arm", {}), ("open_gripper", {}), ("close_gripper", {}),
-])
-def test_every_physical_action_ends_the_cycle(name, args, monkeypatch):
-    planner = mock_brain(monkeypatch, response(tool_call("get_state", "{}", "read")), response(
-        tool_call(name, json.dumps(args), "physical"),
-        tool_call("turn", '{"degrees": -30}', "stale-turn"),
-    ))
-    controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-    getattr(controller, name).return_value = {"status": "completed"}
-
-    asyncio.run(loop.run_episode(RobotState(), controller))
-
-    physical_calls = [call for call in controller.mock_calls if call[0] in PHYSICAL_ACTIONS]
-    assert len(physical_calls) == 1
-    assert physical_calls[0][0] == name
-    planner.client.submit_tool_outputs_simple.assert_awaited_once()  # read-only follow-up only
-
-
-def test_hardware_failure_still_consumes_the_view(monkeypatch):
-    planner = mock_brain(monkeypatch, response(
-        tool_call("turn", '{"degrees": 30}', "failed-turn"),
-        tool_call("forward", '{"distance_m": 0.2}', "stale-move"),
-    ))
-    controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-    controller.turn.side_effect = RoboMasterError("link lost after partial motion")
-    state = RobotState()
-
-    asyncio.run(loop.run_episode(state, controller))
-
-    assert state.last_action_result["result"]["status"] == "error"
-    controller.forward.assert_not_called()
-    planner.client.submit_tool_outputs_simple.assert_not_awaited()
-
-
-def test_failed_perception_cannot_authorize_a_second_movement(monkeypatch):
-    planner = mock_brain(monkeypatch, response(tool_call("turn", '{"degrees": 20}', "turn")),
-                         response(tool_call("forward", '{"distance_m": 0.2}', "stale")), response())
-    monkeypatch.setattr(loop, "describe_scene", Mock(side_effect=["Scene before turn", None]))
-    controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-    controller.turn.return_value = {"status": "completed"}
-    state = RobotState()
-
-    async def two_cycles():
-        await loop.run_episode(state, controller)
-        await loop.run_episode(state, controller)
-
-    asyncio.run(two_cycles())
-    controller.forward.assert_not_called()
-    assert state.last_action_result["name"] == "turn"
-    assert state.last_action_result["result"]["status"] == "completed"
-    planner.client.send_message.assert_awaited_once()
-    planner.client.submit_tool_outputs_simple.assert_not_awaited()
-    assert planner._pending_tool_outputs  # Submit only after vision recovers.
-    assert not state.scene_fresh
-
-
-@pytest.mark.parametrize("bad_call", [
-    tool_call("turn", "{bad json", "bad"),
-    tool_call("turn", "[]", "bad"),
-    {"id": "bad", "function": None},
-    {"id": "bad", "function": {"name": []}},
-])
-def test_malformed_raw_tool_calls_recover_without_sdk_parsing_crash(bad_call, monkeypatch):
-    planner = mock_brain(monkeypatch, response(bad_call), response())
-    controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-
-    state = asyncio.run(loop.run_episode(RobotState(), controller))
-
-    assert state.last_action_result["result"]["status"] == "rejected"
-    assert [call for call in controller.mock_calls if call[0] in PHYSICAL_ACTIONS] == []
-    feedback = planner.client.submit_tool_outputs_simple.call_args.kwargs["tool_outputs"]
-    assert json.loads(feedback[0]["output"])["status"] == "rejected"
+    state = RobotState(scene_fresh=True)
+    results = asyncio.run(planner.run_tools("scene", "prompt", [],
+                          lambda name, args: loop._execute_verb(name, args, state, controller)))
+    assert results[0]["result"]["status"] == "rejected"
+    assert controller.mock_calls == []
 
 
 def test_planner_cannot_request_the_direct_mode_bypass():

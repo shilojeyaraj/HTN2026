@@ -156,9 +156,9 @@ def test_missing_or_stale_frame_blocks_autonomous_planning_and_motion(stale, str
             controller._frame_received_at -= robomaster.CAMERA_MAX_FRAME_AGE_S + 1
         assert controller.get_latest_frame() is None
         assert controller._latest_frame is good  # Rejection doesn't clear the buffer.
-    vision = Mock(side_effect=AssertionError("unsafe frame must not reach vision"))
+    vision = AsyncMock(side_effect=AssertionError("unsafe frame must not reach vision"))
     planner = AsyncMock(side_effect=AssertionError("unsafe frame must not reach planner"))
-    monkeypatch.setattr(loop, "describe_scene", vision)
+    monkeypatch.setattr(loop, "decide_action", vision)
     monkeypatch.setattr(loop.brain, "run_tools", planner)
     state = asyncio.run(loop.run_episode(RobotState(current_goal="find the chair", scene_fresh=True), controller))
     assert not state.scene_fresh

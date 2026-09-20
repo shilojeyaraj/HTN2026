@@ -18,6 +18,7 @@ from control.robomaster import RoboMasterController, RoboMasterError
 
 @pytest.mark.parametrize("text,name,args", [
     ("turn 360", "turn", {"degrees": 360}),
+    ("turn 45", "turn", {"degrees": 45}),
     ("turn left 45 degrees", "turn", {"degrees": 45}),
     ("turn right 45 degrees", "turn", {"degrees": -45}),
     ("turn 270 clockwise", "turn", {"degrees": -270}),
@@ -62,19 +63,20 @@ def local_only(monkeypatch):
     for name in PHYSICAL_ACTIONS | {"stop"}:
         getattr(controller, name).return_value = {"status": "completed"}
     camera = Mock(side_effect=AssertionError("direct mode must not capture a frame"))
-    vision = Mock(side_effect=AssertionError("direct mode must not call Gemini"))
+    vision = AsyncMock(side_effect=AssertionError("direct mode must not call multimodal AI"))
     planner = AsyncMock(side_effect=AssertionError("direct mode must not call Backboard"))
     monkeypatch.setattr(loop, "get_latest_frame", camera)
-    monkeypatch.setattr(loop, "describe_scene", vision)
+    monkeypatch.setattr(loop, "decide_action", vision)
     monkeypatch.setattr(loop.brain, "run_tools", planner)
     yield controller
     camera.assert_not_called()
-    vision.assert_not_called()
+    vision.assert_not_awaited()
     planner.assert_not_awaited()
 
 
 @pytest.mark.parametrize("goal,name,chunks", [
     ("turn 360", "turn", [{"degrees": 90}] * 4),
+    ("turn 45", "turn", [{"degrees": 45}]),
     ("turn left 45 degrees", "turn", [{"degrees": 45}]),
     ("turn -270", "turn", [{"degrees": -90}] * 3),
     ("move forward 1.5 m", "forward", [0.75, 0.75]),
@@ -129,31 +131,6 @@ def test_trailing_stop_executes_locally_after_bounded_maneuver(goal, expected, l
     assert local_only.mock_calls == expected
     assert state.finished_goal == goal
     assert state.last_action_result["result"]["status"] == "completed"
-
-
-@pytest.mark.parametrize("goal", ["find the red chair", "go over there"])
-def test_closed_loop_route_perceives_then_plans(goal, monkeypatch, caplog):
-    events = []
-    monkeypatch.setattr(loop, "get_latest_frame", lambda _: events.append("camera") or b"jpeg")
-    monkeypatch.setattr(loop, "describe_scene", lambda _: events.append("vision") or "Scene")
-    controller = Mock(spec=RoboMasterController)
-    controller.get_chassis_state.return_value = {}
-
-    async def plan(**kwargs):
-        events.append("planner")
-        assert json.loads(kwargs["content"])["current_goal"] == goal
-        first = kwargs["execute_tool"]("turn", {"degrees": 45})
-        second = kwargs["execute_tool"]("forward", {"distance_m": 0.2})
-        assert first["status"] == "completed" and second["status"] == "rejected"
-        return []
-
-    controller.turn.return_value = {"status": "completed"}
-    monkeypatch.setattr(loop.brain, "run_tools", plan)
-    with caplog.at_level(logging.INFO):
-        asyncio.run(loop.run_episode(RobotState(current_goal=goal), controller))
-    assert events == ["camera", "vision", "planner"]
-    assert "execution mode=CLOSED_LOOP" in caplog.text
-    controller.forward.assert_not_called()
 
 
 @pytest.mark.parametrize("total", [0.75, 0.751, 0.76, 1.5, 1.51, 1.8])
@@ -232,8 +209,8 @@ def test_main_exits_after_one_direct_goal_before_vision_cooldown(local_only, mon
     monkeypatch.setattr(main, "RoboMasterController", lambda: local_only)
     monkeypatch.setattr(main, "brain", SimpleNamespace(aclose=AsyncMock()))
     cooldown = Mock(side_effect=AssertionError("direct goal should already be finished"))
-    monkeypatch.setattr(main, "vision_unavailable_reason", cooldown)
-    monkeypatch.setattr(main, "close_vision_client", Mock())
+    monkeypatch.setattr(main.asyncio, "sleep", cooldown)
+    monkeypatch.setattr(main, "aclose_vision_client", AsyncMock())
 
     asyncio.run(main.main())
 

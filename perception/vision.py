@@ -1,14 +1,16 @@
-"""Scene understanding through Gemini; Backboard receives only the resulting text."""
+"""Gemini image decisions and standalone scene descriptions using one shared client."""
 
 import logging
+import json
 import os
 import time
 
-from shared.inference import is_daily_quota, is_rate_limited, retry_delay
+from shared.inference import InferenceUnavailable, is_daily_quota, is_rate_limited, retry_delay
 
 logger = logging.getLogger(__name__)
 
 MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-3.6-flash")
+ACTION_MODEL = os.getenv("GEMINI_ACTION_MODEL", "gemini-3.5-flash-lite")
 FALLBACK_MODEL = os.getenv("GEMINI_VISION_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 MIN_INTERVAL_S = float(os.getenv("VISION_MIN_INTERVAL_S", "6"))
 _client = None
@@ -43,6 +45,33 @@ def close_vision_client() -> None:
             client.close()
         except Exception:
             logger.warning("Gemini vision client did not close cleanly", exc_info=True)
+
+
+async def aclose_vision_client() -> None:
+    """Close both transports once, after the application's async work is finished."""
+    try:
+        if _client is not None:
+            await _client.aio.aclose()
+    finally:
+        close_vision_client()
+
+
+async def decide_action(jpeg_bytes: bytes, context: dict) -> str:
+    """One image + context request; validation/execution belong to the outer loop."""
+    from google.genai import types
+    from brain.tools import DECISION_SCHEMA, MULTIMODAL_PROMPT, VERBS
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise InferenceUnavailable("GEMINI_API_KEY is not set; autonomous motion is disabled")
+    response = await _get_client(api_key).aio.models.generate_content(
+        model=ACTION_MODEL,
+        contents=[types.Part.from_bytes(data=jpeg_bytes, mime_type="image/jpeg"),
+                  json.dumps({**context, "allowed_tools": VERBS}, default=str)],
+        config={"system_instruction": MULTIMODAL_PROMPT,
+                "response_mime_type": "application/json", "response_json_schema": DECISION_SCHEMA},
+    )
+    return response.text or ""
 
 
 def vision_retry_delay() -> float:
