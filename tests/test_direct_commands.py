@@ -24,8 +24,11 @@ from control.robomaster import RoboMasterController, RoboMasterError
     ("turn -90", "turn", {"degrees": -90}),
     ("turn a little", "turn", {"degrees": 15}),
     ("turn left slightly", "turn", {"degrees": 15}),
+    ("turn left a little", "turn", {"degrees": 15}),
     ("move forward 1.5 m", "forward", {"distance_m": 1.5}),
     ("move forward slightly", "forward", {"distance_m": 0.2}),
+    ("move forward a little", "forward", {"distance_m": 0.2}),
+    ("move forward a small amount", "forward", {"distance_m": 0.2}),
     ("move backward a little", "backward", {"distance_m": 0.2}),
     ("strafe right 0.2 m", "strafe_right", {"distance_m": 0.2}),
     ("strafe left 1.8 meters", "strafe_left", {"distance_m": 1.8}),
@@ -45,6 +48,8 @@ def test_explicit_commands_parse_locally(text, name, args):
     "go over there", "turn left", "move forward", "turn until facing the chair",
     "turn 360 and find the chair", "turn 90 if the path is clear", "don't turn 90",
     "stop when you see a person", "turn right -45", "move forward 1.5 feet", "turn left 45 right",
+    "find the red chair, then stop", "move forward a little if clear, then stop",
+    "turn 90 then move forward 1 m, then stop", "move forward a little, then stop, then stop",
 ])
 def test_ambiguous_compound_conditional_and_perceptual_goals_are_not_direct(text):
     assert parse_direct_command(text) is None
@@ -74,6 +79,9 @@ def local_only(monkeypatch):
     ("turn -270", "turn", [{"degrees": -90}] * 3),
     ("move forward 1.5 m", "forward", [0.75, 0.75]),
     ("move forward slightly", "forward", [0.2]),
+    ("move forward a small amount", "forward", [0.2]),
+    ("move forward a little", "forward", [0.2]),
+    ("turn left a little", "turn", [{"degrees": 15}]),
     ("move backward slightly", "backward", [0.2]),
     ("strafe right 1.8 m", "strafe_right", [0.75, 0.75, 0.3]),
     ("open gripper", "open_gripper", [{}]),
@@ -101,6 +109,26 @@ def test_direct_goal_runs_bounded_chunks_once_without_perception(goal, name, chu
     assert "execution mode=DIRECT" in caplog.text
     assert "total requested=" in caplog.text and "local chunks=" in caplog.text
     assert "DIRECT execution finished duration_s=" in caplog.text
+
+
+@pytest.mark.parametrize("goal,expected", [
+    ("move forward a small amount, then stop", [call.forward(0.2), call.stop()]),
+    ("move forward 1.5 m then stop", [call.forward(0.75), call.forward(0.75), call.stop()]),
+    ("turn left a little, then stop", [call.turn(degrees=15), call.stop()]),
+    ("turn 360, then stop", [call.turn(degrees=90)] * 4 + [call.stop()]),
+    ("open gripper, then stop", [call.open_gripper(), call.stop()]),
+    ("turn 0, then stop", [call.stop()]),
+])
+def test_trailing_stop_executes_locally_after_bounded_maneuver(goal, expected, local_only):
+    command = parse_direct_command(goal)
+    assert command["then_stop"] is True
+    assert decompose_direct_command(command)[-1] == {"verb": "stop", "args": {}}
+
+    state = asyncio.run(loop.run_episode(RobotState(current_goal=goal), local_only))
+
+    assert local_only.mock_calls == expected
+    assert state.finished_goal == goal
+    assert state.last_action_result["result"]["status"] == "completed"
 
 
 @pytest.mark.parametrize("goal", ["find the red chair", "go over there"])

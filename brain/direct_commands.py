@@ -11,6 +11,7 @@ MAX_DIRECT_CHUNKS = 100
 
 NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)"
 TURN_DIRECTION = r"left|right|clockwise|counterclockwise"
+SMALL_QUANTITY = r"slightly|a little|a small amount"
 TRANSLATIONS = {"forward", "backward", "strafe_left", "strafe_right"}
 
 
@@ -20,6 +21,14 @@ def parse_direct_command(text: str | None) -> dict | None:
         return None
     text = " ".join(text.lower().split()).rstrip(".!")
     text = re.sub(r"^please ", "", text)
+    text, then_stop = re.subn(r"(?:,\s*|\s+)then stop$", "", text)
+    command = _parse_single_command(text)
+    if command and then_stop:
+        command["then_stop"] = True
+    return command
+
+
+def _parse_single_command(text: str) -> dict | None:
     if re.fullmatch(r"stop(?: (?:the )?(?:robot|chassis))?", text):
         return {"verb": "stop", "args": {}}
     if match := re.fullmatch(r"(open|close) (?:the )?(?:gripper|claw)", text):
@@ -29,13 +38,13 @@ def parse_direct_command(text: str | None) -> dict | None:
 
     if match := re.fullmatch(
         rf"(?:turn|rotate)(?: ({TURN_DIRECTION}))? "
-        rf"({NUMBER}(?:\s*(?:degrees?|°))?|slightly|a little)(?: ({TURN_DIRECTION}))?", text,
+        rf"({NUMBER}(?:\s*(?:degrees?|°))?|{SMALL_QUANTITY})(?: ({TURN_DIRECTION}))?", text,
     ):
         before, quantity, after = match.groups()
         if before and after:  # Conflicting/redundant directions are ambiguous.
             return None
         direction = before or after
-        degrees = SLIGHT_TURN_DEG if quantity in {"slightly", "a little"} else float(re.sub(r"\s*(?:degrees?|°)$", "", quantity))
+        degrees = SLIGHT_TURN_DEG if re.fullmatch(SMALL_QUANTITY, quantity) else float(re.sub(r"\s*(?:degrees?|°)$", "", quantity))
         if direction and degrees < 0:
             return None
         if direction in {"right", "clockwise"}:
@@ -44,13 +53,13 @@ def parse_direct_command(text: str | None) -> dict | None:
 
     if match := re.fullmatch(
         rf"((?:(?:move|drive) )?(?:forward|backward|backwards)|strafe (?:left|right)) "
-        rf"({NUMBER}\s*(?:m|metres?|meters?)|slightly|a little)", text,
+        rf"({NUMBER}\s*(?:m|metres?|meters?)|{SMALL_QUANTITY})", text,
     ):
         direction, quantity = match.groups()
         name = re.sub(r"^(?:move|drive) ", "", direction).replace(" ", "_")
         if name == "backwards":
             name = "backward"
-        distance = SLIGHT_TRANSLATION_M if quantity in {"slightly", "a little"} else float(re.sub(r"\s*(?:m|metres?|meters?)$", "", quantity))
+        distance = SLIGHT_TRANSLATION_M if re.fullmatch(SMALL_QUANTITY, quantity) else float(re.sub(r"\s*(?:m|metres?|meters?)$", "", quantity))
         return {"verb": name, "args": {"distance_m": distance}}
 
     if match := re.fullmatch(rf"move (?:the )?arm (forward|backward|up|down) ({NUMBER})\s*mm", text):
@@ -72,14 +81,15 @@ def decompose_direct_command(command: dict) -> list[dict]:
     name, args = command.get("verb"), command.get("args")
     # Reuse the executor's numeric/type checks, but don't clamp the requested total.
     validate_tool_args(name, args)
+    stop_calls = [{"verb": "stop", "args": {}}] if command.get("then_stop") else []
     if name not in TRANSLATIONS and name != "turn":
-        return [command]
+        return [{"verb": name, "args": args}] + stop_calls
     key = "degrees" if name == "turn" else "distance_m"
     total = float(args.get(key))
     if name in TRANSLATIONS and total < 0:
         raise ValueError("translation totals must be non-negative; choose forward/backward/strafe direction")
     if total == 0:
-        return []
+        return stop_calls
 
     rule = TOOL_PARAMETERS[name]["properties"][key]
     minimum = Decimal(str(rule["minimum"])) if name in TRANSLATIONS else Decimal(0)
@@ -103,4 +113,4 @@ def decompose_direct_command(command: dict) -> list[dict]:
     for call in calls:
         if validate_tool_args(name, call["args"]) != call["args"]:
             raise ValueError("requested total cannot be split within the configured tool bounds")
-    return calls
+    return calls + stop_calls
