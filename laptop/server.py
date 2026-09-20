@@ -55,7 +55,7 @@ def load_model(device):
 
 
 def handle_connection(conn, infer, show_frame=lambda image: None, receive_audio=lambda samples: None,
-                      recording=None, shutdown=None):
+                      drain_transcripts=None, recording=None, shutdown=None):
     pending = deque(maxlen=1)
     condition = threading.Condition()
     stopped = threading.Event()
@@ -128,6 +128,10 @@ def handle_connection(conn, infer, show_frame=lambda image: None, receive_audio=
                           processing_ms=round((time.monotonic() - start) * 1000),
                           server_frame_age_ms=round((time.monotonic() - received_at) * 1000),
                           advisory_only=True)
+            if drain_transcripts is not None:
+                transcripts = drain_transcripts()
+                if transcripts:
+                    result["transcripts"] = transcripts
             send(conn, json.dumps(result, allow_nan=False).encode(), MAX_RESULT)
     finally:
         stopped.set()
@@ -176,13 +180,25 @@ def serve(args, show_frame=lambda image: None, show_text=lambda text: None, shut
     shutdown = shutdown or threading.Event()
     transcribe = None if args.no_transcription else load_transcriber(args.stt_model, args.stt_cache)
     infer = None if args.no_depth else load_model(args.device)
+    transcript_queue = deque(maxlen=8)
     recording = None
 
     def transcript(event):
         print(json.dumps(event, ensure_ascii=False), flush=True)
         show_text(event)
+        if event.get("final") and event.get("text"):
+            transcript_queue.append({
+                "text": event["text"],
+                "utterance_id": event.get("utterance_id", 0),
+            })
         if recording is not None:
             recording.transcript(event)
+
+    def drain_transcripts():
+        items = list(transcript_queue)
+        transcript_queue.clear()
+        return items
+
     # ponytail: one Pi at a time; concurrent clients only if a second robot arrives.
     with socket.socket() as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -203,7 +219,8 @@ def serve(args, show_frame=lambda image: None, show_text=lambda text: None, shut
                     try:
                         with audio_transcription(transcribe, transcript, args.speech_threshold,
                                                  args.partial_interval) as receive_audio:
-                            handle_connection(conn, infer, show_frame, receive_audio, recording, shutdown)
+                            handle_connection(conn, infer, show_frame, receive_audio,
+                                              drain_transcripts, recording, shutdown)
                     finally:
                         if recording is not None:
                             recording.close()

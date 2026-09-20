@@ -64,7 +64,7 @@ def mjpeg_frames(chunks):
         raise EOFError("truncated MJPEG stream")
 
 
-def stream(sock, args):
+def stream(sock, args, on_transcript=None, on_depth=None, on_frame=None):
     pending = deque(maxlen=1)
     audio_pending = deque(maxlen=10)  # At most 200 ms; drop oldest audio on a slow link.
     condition = threading.Condition()
@@ -104,6 +104,8 @@ def stream(sock, args):
                 jpeg = args.image.read_bytes()
                 if not 0 < len(jpeg) <= MAX_FRAME:
                     raise ValueError("invalid JPEG file size")
+                if on_frame:
+                    on_frame(jpeg)
                 while not stopped.is_set():
                     with condition:
                         pending.append(jpeg)
@@ -112,6 +114,8 @@ def stream(sock, args):
                         return
             else:
                 for jpeg in mjpeg_frames(pipe_chunks(camera, stopped, args.timeout)):
+                    if on_frame:
+                        on_frame(jpeg)
                     with condition:
                         pending.append(jpeg)
                         condition.notify()
@@ -167,6 +171,11 @@ def stream(sock, args):
             result = json.loads(receive(sock, MAX_RESULT))
             if not isinstance(result, dict) or result.get("status") not in {"ok", "uncertain", "error", "preview"}:
                 raise ValueError("invalid server result")
+            if on_depth and result.get("status") in ("ok", "uncertain"):
+                on_depth(result)
+            if on_transcript and result.get("transcripts"):
+                for t in result["transcripts"]:
+                    on_transcript(t["text"], t.get("utterance_id", 0))
             print(json.dumps(result), flush=True)
             if args.once:
                 return
@@ -195,6 +204,40 @@ def stream(sock, args):
         for process in (camera, microphone):
             if process:
                 process.stdout.close()
+
+
+def start_streaming(host, port=8765, video_device="/dev/video0",
+                    audio_device="default", fps=15, width=640, height=480,
+                    quality=70, input_format="mjpeg", no_audio=False,
+                    on_depth=None, on_transcript=None, on_frame=None):
+    """Start the USB webcam + mic streaming pipeline in a background thread.
+
+    Pushes depth results to on_depth(result_dict), transcripts to
+    on_transcript(text, utterance_id), and JPEG frames to on_frame(jpeg_bytes).
+    Returns a threading.Event that can be set to stop the stream.
+    """
+    args = argparse.Namespace(
+        host=host, port=port, image=None, video_device=video_device,
+        audio_device=audio_device, no_audio=no_audio, input_format=input_format,
+        width=width, height=height, once=False, timeout=30, fps=fps, quality=quality,
+    )
+    stopped = threading.Event()
+
+    def _run():
+        while not stopped.is_set():
+            try:
+                with socket.create_connection((host, port), timeout=30) as sock:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+                    stream(sock, args, on_transcript=on_transcript,
+                           on_depth=on_depth, on_frame=on_frame)
+            except (OSError, EOFError, ValueError, subprocess.SubprocessError):
+                if stopped.is_set():
+                    return
+                time.sleep(1)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return stopped
 
 
 def main():

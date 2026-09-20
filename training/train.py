@@ -47,7 +47,7 @@ sft_config = SFTConfig(
     logging_steps=10,
     save_strategy="epoch",
     gradient_checkpointing=True,
-    warmup_ratio=0.1,
+    warmup_steps=10,
     lr_scheduler_type="cosine",
     bf16=True,
 )
