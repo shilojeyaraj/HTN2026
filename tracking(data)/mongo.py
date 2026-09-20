@@ -53,30 +53,55 @@ def _insert(collection: str, doc: dict) -> None:
         logger.debug("MongoDB insert failed for %s", collection, exc_info=True)
 
 
-def log_transcript(text: str, final: bool, utterance_id: int, pose: tuple = None) -> None:
+def log_transcript(text: str, final: bool, utterance_id: int, pose: tuple = None, encounter_id: str = None) -> None:
     _insert("transcripts", {
         "text": text,
         "final": final,
         "utterance_id": utterance_id,
         "pose": list(pose) if pose else None,
+        "encounter_id": encounter_id,
     })
 
 
-def log_brain_call(tool: str, args: dict, result: dict, pose: tuple = None) -> None:
-    _insert("brain_activity", {
+def log_brain_call(tool: str, args: dict, result: dict, pose: tuple = None, encounter_id: str = None) -> str:
+    """Log a brain tool call. Returns the inserted document ID as string."""
+    db = _get_db()
+    if db is None:
+        return None
+    doc = {
         "tool": tool,
         "args": args,
         "result": result,
         "pose": list(pose) if pose else None,
-    })
+        "encounter_id": encounter_id,
+        "timestamp": datetime.now(timezone.utc),
+    }
+    try:
+        result = db["brain_activity"].insert_one(doc)
+        return str(result.inserted_id)
+    except Exception:
+        logger.debug("MongoDB insert failed for brain_activity", exc_info=True)
+        return None
 
 
-def log_finding(finding_type: str, description: str, pose: tuple = None) -> None:
-    _insert("findings", {
+def log_finding(finding_type: str, description: str, pose: tuple = None, encounter_id: str = None) -> str:
+    """Log a finding. Returns the inserted document ID as string."""
+    db = _get_db()
+    if db is None:
+        return None
+    doc = {
         "finding_type": finding_type,
         "description": description,
         "pose": list(pose) if pose else None,
-    })
+        "encounter_id": encounter_id,
+        "timestamp": datetime.now(timezone.utc),
+    }
+    try:
+        result = db["findings"].insert_one(doc)
+        return str(result.inserted_id)
+    except Exception:
+        logger.debug("MongoDB insert failed for findings", exc_info=True)
+        return None
 
 
 def log_sensor_reading(temperature: dict, audio: dict, gyro: dict, pose: tuple = None) -> None:
@@ -124,6 +149,7 @@ def get_stats() -> dict:
             "sensor_readings": db["sensor_readings"].count_documents({}),
             "rag_logs": db["rag_logs"].count_documents({}),
             "insights": db["insights"].count_documents({}),
+            "encounters": db["encounters"].count_documents({}),
         }
     except Exception:
         return {"connected": False}

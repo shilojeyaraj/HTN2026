@@ -25,6 +25,7 @@ from perception import sensors
 from perception.camera import get_latest_detections, get_latest_frame
 from perception.vision import describe_scene
 from tracking import mongo as db
+from tracking import encounters as encounter_db
 from voice.tts import speak
 
 logger = logging.getLogger(__name__)
@@ -45,12 +46,14 @@ def _perceive(state: RobotState) -> RobotState:
     return state
 
 
-def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None) -> dict:
+def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None, encounter_id: str = None) -> dict:
     """Execute a single verb through the safety gate and controller."""
     if name == "speak":
         speak(args["text"])
         brain_activity.log_call(name, args, {"status": "completed"})
-        db.log_brain_call(name, args, {"status": "completed"}, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, {"status": "completed"}, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return {"status": "completed"}
     if name == "look_around":
         try:
@@ -58,40 +61,57 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None
             state.scene_description = describe_scene(frame_jpeg, detections)
             result = {"scene": state.scene_description}
             brain_activity.log_call(name, args, result)
-            db.log_brain_call(name, args, result, state.robot_pose)
+            activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+            if encounter_id and activity_id:
+                encounter_db.link_brain_activity(encounter_id, activity_id)
             return result
         except Exception:
             result = {"error": "vision unavailable", "scene": state.scene_description or "unknown"}
             brain_activity.log_call(name, args, result)
-            db.log_brain_call(name, args, result, state.robot_pose)
+            activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+            if encounter_id and activity_id:
+                encounter_db.link_brain_activity(encounter_id, activity_id)
             return result
     if name == "check_map":
         if mapper is not None:
             result = mapper.nearby_summary(state.robot_pose, args.get("radius_m", 3.0))
             brain_activity.log_call(name, args, result)
-            db.log_brain_call(name, args, result, state.robot_pose)
+            activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+            if encounter_id and activity_id:
+                encounter_db.link_brain_activity(encounter_id, activity_id)
             return result
         result = {"error": "map not available"}
         brain_activity.log_call(name, args, result)
-        db.log_brain_call(name, args, result, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result
     if name == "check_safety":
         result_val = safety.check(args["action"], args, get_latest_detections())
         result = {"status": result_val, "action": args["action"]}
         brain_activity.log_call(name, args, result)
-        db.log_brain_call(name, args, result, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result
     if name == "search_knowledge":
         result = brain.search_memory(args["query"])
         brain_activity.log_call(name, args, result or {"results": "no results"})
         db.log_rag(args["query"], result or {"results": "no results"}, state.robot_pose)
-        db.log_brain_call(name, args, result or {"results": "no results"}, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result or {"results": "no results"}, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result or {"results": "no results"}
     if name == "log_finding":
         result = brain.log_finding(args["finding_type"], args["description"])
         brain_activity.log_call(name, args, result or {"status": "logged"})
-        db.log_finding(args["finding_type"], args["description"], state.robot_pose)
-        db.log_brain_call(name, args, result or {"status": "logged"}, state.robot_pose)
+        finding_id = db.log_finding(args["finding_type"], args["description"], state.robot_pose, encounter_id)
+        activity_id = db.log_brain_call(name, args, result or {"status": "logged"}, state.robot_pose, encounter_id)
+        if encounter_id:
+            if finding_id:
+                encounter_db.link_finding(encounter_id, finding_id)
+            if activity_id:
+                encounter_db.link_brain_activity(encounter_id, activity_id)
         return result or {"status": "logged"}
     if name == "analyze_patterns":
         result = brain.get_insights()
@@ -99,49 +119,65 @@ def _execute_verb(name: str, args: dict, state: RobotState, arbiter, mapper=None
             mission_insights.update(result)
             db.log_insights(result)
         brain_activity.log_call(name, args, result or {"insights": "no data"})
-        db.log_brain_call(name, args, result or {"insights": "no data"}, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result or {"insights": "no data"}, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result or {"insights": "no data"}
     if name == "get_obstacles":
         result = {"detections": get_latest_detections()}
         brain_activity.log_call(name, args, result)
-        db.log_brain_call(name, args, result, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result
     if name == "get_state":
         result = {"pose": state.robot_pose, "velocity": state.velocity, "goal": state.current_goal}
         brain_activity.log_call(name, args, result)
-        db.log_brain_call(name, args, result, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result
     if name == "get_temperature":
         temp = sensors.read_temperature()
         sensor_state.update_temperature(temp["celsius"], temp["status"])
         brain_activity.log_call(name, args, temp)
-        db.log_brain_call(name, args, temp, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, temp, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         db.log_sensor_reading(temp, sensors.read_audio(), sensors.read_gyro(), state.robot_pose)
         return temp
     if name == "get_audio":
         audio = sensors.read_audio()
         sensor_state.update_audio(audio.get("db", 0), audio.get("event"))
         brain_activity.log_call(name, args, audio)
-        db.log_brain_call(name, args, audio, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, audio, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return audio
     if name == "get_gyro":
         gyro = sensors.read_gyro()
         sensor_state.update_gyro(gyro.get("pitch_deg", 0), gyro.get("roll_deg", 0),
                                  gyro.get("tipped", False), gyro.get("bump", False))
         brain_activity.log_call(name, args, gyro)
-        db.log_brain_call(name, args, gyro, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, gyro, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return gyro
 
     state.safety_status = safety.check(name, args, get_latest_detections())
     if state.safety_status == "VETO":
         result = {"status": "vetoed", "reason": "obstacle ahead"}
         brain_activity.log_call(name, args, result)
-        db.log_brain_call(name, args, result, state.robot_pose)
+        activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+        if encounter_id and activity_id:
+            encounter_db.link_brain_activity(encounter_id, activity_id)
         return result
 
     result = execute_verb(name, args, arbiter, get_latest_detections)
     brain_activity.log_call(name, args, result)
-    db.log_brain_call(name, args, result, state.robot_pose)
+    activity_id = db.log_brain_call(name, args, result, state.robot_pose, encounter_id)
+    if encounter_id and activity_id:
+        encounter_db.link_brain_activity(encounter_id, activity_id)
     return result
 
 
@@ -181,6 +217,10 @@ def _update_map(state: RobotState, mapper, pose_estimator, transcript_buffer=Non
 
 def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
                 transcript_buffer=None) -> RobotState:
+    # Get active encounter for linking
+    active_encounter = encounter_db.get_active_encounter()
+    encounter_id = active_encounter["encounter_id"] if active_encounter else None
+    
     state = _perceive(state)
 
     if transcript_buffer is not None and not state.last_user_command:
@@ -188,21 +228,26 @@ def run_episode(state: RobotState, arbiter, mapper=None, pose_estimator=None,
         if text:
             state.last_user_command = text
             logger.info("transcript -> last_user_command: %s", text)
-            db.log_transcript(text, final=True, utterance_id=0, pose=state.robot_pose)
+            db.log_transcript(text, final=True, utterance_id=0, pose=state.robot_pose, encounter_id=encounter_id)
+            # Also add to encounter's embedded transcript
+            if encounter_id:
+                # Determine speaker based on content (simple heuristic)
+                speaker = "person"  # Default; can be enhanced with better detection
+                encounter_db.add_transcript_message(encounter_id, speaker, text)
 
     # Fast path: try the Baseten fine-tuned parser for simple voice commands.
     # Falls through to the Backboard brain for complex/unrecognized commands.
     if state.last_user_command:
         parsed = command_parser.parse(state.last_user_command)
         if parsed is not None:
-            result = _execute_verb(parsed["verb"], parsed["args"], state, arbiter, mapper)
+            result = _execute_verb(parsed["verb"], parsed["args"], state, arbiter, mapper, encounter_id)
             logger.info("parser fast-path: %s -> %s -> %s", state.last_user_command, parsed, result)
             state.last_user_command = None
             _update_map(state, mapper, pose_estimator, transcript_buffer)
             return state
 
     def execute_tool(name: str, args: dict) -> dict:
-        return _execute_verb(name, args, state, arbiter, mapper)
+        return _execute_verb(name, args, state, arbiter, mapper, encounter_id)
 
     user_content = (
         f"Scene: {state.scene_description}\n"
