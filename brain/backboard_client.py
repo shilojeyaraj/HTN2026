@@ -6,11 +6,9 @@ SDK verified against backboard-sdk v1.5.19:
 - call.function.arguments is a JSON string (not parsed_arguments)
 """
 
-import asyncio
 import json
 import logging
 import os
-import threading
 import time
 
 from backboard import BackboardClient
@@ -33,7 +31,7 @@ ENCOUNTERS = [
 
 class BackboardBrain:
     def __init__(self, llm_provider: str, model_name: str):
-        self.client = BackboardClient(api_key=os.environ["BACKBOARD_API_KEY"], timeout=120)
+        self.client = None
         self.llm_provider = llm_provider
         self.model_name = model_name
         self.thread_id = None
@@ -41,11 +39,35 @@ class BackboardBrain:
         self._knowledge_uploaded = False
         self._encounters_loaded = False
 
+    def _get_client(self) -> BackboardClient:
+        if self.client is None:
+            self.client = BackboardClient(api_key=os.environ["BACKBOARD_API_KEY"], timeout=120)
+        return self.client
+
+    async def aclose(self) -> None:
+        """Close the long-lived Backboard client during application shutdown."""
+        client, self.client = self.client, None
+        if client is not None:
+            await client.aclose()
+
+    @staticmethod
+    def _log_response(label: str, response, elapsed_s: float) -> None:
+        logger.info("Backboard planner: %s %s in %.2fs", label, response.status, elapsed_s)
+        if response.status == "FAILED":
+            try:
+                payload = response.model_dump(mode="json")
+            except Exception:
+                payload = repr(response)
+            logger.error(
+                "Backboard planner: %s failed; parsed response type=%s payload=%s",
+                label, type(response).__name__, payload,
+            )
+
     async def _run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str) -> list:
         await self._ensure_initialized()
         logger.info("Backboard planner: sending request to %s/%s", self.llm_provider, self.model_name)
         started = time.monotonic()
-        response = await self.client.send_message(
+        response = await self._get_client().send_message(
             content=content,
             system_prompt=system_prompt,
             llm_provider=self.llm_provider,
@@ -55,7 +77,7 @@ class BackboardBrain:
             assistant_id=self.assistant_id,
             memory=memory,
         )
-        logger.info("Backboard planner: response %s in %.2fs", response.status, time.monotonic() - started)
+        self._log_response("response", response, time.monotonic() - started)
         self.thread_id = response.thread_id
         self.assistant_id = response.assistant_id
 
@@ -77,22 +99,23 @@ class BackboardBrain:
 
             logger.info("Backboard planner: submitting %d tool result(s)", len(tool_outputs))
             started = time.monotonic()
-            response = await self.client.submit_tool_outputs_simple(
+            response = await self._get_client().submit_tool_outputs_simple(
                 thread_id=response.thread_id, tool_outputs=tool_outputs,
             )
-            logger.info("Backboard planner: follow-up response %s in %.2fs", response.status, time.monotonic() - started)
+            self._log_response("follow-up response", response, time.monotonic() - started)
             rounds += 1
 
         return results
 
-    def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
-        return asyncio.run(self._run_tools(content, system_prompt, tools, execute_tool, memory))
+    async def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
+        return await self._run_tools(content, system_prompt, tools, execute_tool, memory)
 
     async def _ensure_initialized(self) -> None:
         """Create static assistant data without waiting for document indexing."""
+        client = self._get_client()
         if self.assistant_id is None:
             logger.info("Backboard planner: creating assistant")
-            assistant = await self.client.create_assistant(name="rescue-rover-brain")
+            assistant = await client.create_assistant(name="rescue-rover-brain")
             self.assistant_id = assistant.assistant_id
         if not self._knowledge_uploaded:
             logger.info("Backboard planner: uploading knowledge base")
@@ -101,7 +124,7 @@ class BackboardBrain:
                 path = os.path.join(kb_dir, doc)
                 if os.path.exists(path):
                     try:
-                        await self.client.upload_document_to_assistant(self.assistant_id, path)
+                        await client.upload_document_to_assistant(self.assistant_id, path)
                     except Exception:
                         pass
             self._knowledge_uploaded = True
@@ -110,7 +133,7 @@ class BackboardBrain:
             logger.info("Backboard planner: loading encounter memory")
             for enc in ENCOUNTERS:
                 try:
-                    await self.client.add_memory(
+                    await client.add_memory(
                         self.assistant_id,
                         f"{enc['id']}: {enc['status']} at {enc['location']}. Duration: {enc['duration']}.",
                         metadata={"type": "encounter", "encounter_id": enc["id"], "sector": enc["sector"], "status": enc["status"]},
@@ -121,70 +144,28 @@ class BackboardBrain:
 
     async def _search_memory(self, query: str) -> dict:
         await self._ensure_initialized()
-        return await self.client.search_memories(self.assistant_id, query, limit=5)
+        return await self._get_client().search_memories(self.assistant_id, query, limit=5)
 
     async def _log_finding(self, finding_type: str, description: str) -> dict:
         await self._ensure_initialized()
-        return await self.client.add_memory(
+        return await self._get_client().add_memory(
             self.assistant_id,
             f"[{finding_type}] {description}",
             metadata={"type": finding_type},
         )
 
-    def search_memory(self, query: str) -> dict:
-        """Search mission memory and knowledge base. Thread-safe: runs in a new event loop."""
-        result = [{}]
-        def _worker():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result[0] = loop.run_until_complete(self._search_memory(query))
-            except Exception:
-                pass
-            finally:
-                loop.close()
-        t = threading.Thread(target=_worker)
-        t.start()
-        t.join()
-        return result[0]
+    async def search_memory(self, query: str) -> dict:
+        return await self._search_memory(query)
 
-    def log_finding(self, finding_type: str, description: str) -> dict:
-        """Log a mission finding to persistent memory. Thread-safe."""
-        result = [{}]
-        def _worker():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result[0] = loop.run_until_complete(self._log_finding(finding_type, description))
-            except Exception:
-                pass
-            finally:
-                loop.close()
-        t = threading.Thread(target=_worker)
-        t.start()
-        t.join()
-        return result[0]
+    async def log_finding(self, finding_type: str, description: str) -> dict:
+        return await self._log_finding(finding_type, description)
 
     async def _get_insights(self) -> dict:
         await self._ensure_initialized()
-        return await self.client.get_memory_insights(self.assistant_id)
+        return await self._get_client().get_memory_insights(self.assistant_id)
 
-    def get_insights(self) -> dict:
-        """Analyze patterns across all stored mission memory. Thread-safe."""
-        result = [{}]
-        def _worker():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result[0] = loop.run_until_complete(self._get_insights())
-            except Exception:
-                pass
-            finally:
-                loop.close()
-        t = threading.Thread(target=_worker)
-        t.start()
-        t.join()
-        return result[0]
+    async def get_insights(self) -> dict:
+        return await self._get_insights()
 
 
 # Shared across the deliberative loop (brain/loop.py) so repeated episodes ride the same

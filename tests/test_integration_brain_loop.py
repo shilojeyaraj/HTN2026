@@ -1,5 +1,7 @@
 """Integration test for the full brain loop with a fake RoboMaster controller."""
 
+import asyncio
+
 from unittest.mock import patch
 
 import pytest
@@ -49,7 +51,7 @@ def test_run_episode_with_fake_robomaster():
     )
     with patch("brain.loop.get_latest_frame", return_value=b"jpeg"), \
          patch("brain.loop.describe_scene", return_value="A room with obstacles ahead. Free space on the left."):
-        state = run_episode(state, FakeRoboMasterController())
+        state = asyncio.run(run_episode(state, FakeRoboMasterController()))
 
     assert state is not None
     assert state.last_user_command is None

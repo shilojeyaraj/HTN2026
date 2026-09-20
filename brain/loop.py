@@ -64,7 +64,7 @@ def _execute_verb(name: str, args: dict, state: RobotState, controller: RoboMast
         return {"status": "error", "detail": str(exc)}
 
 
-def run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
+async def run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
     logger.info("episode: starting goal=%r", state.current_goal)
     state = _perceive(state, controller)
 
@@ -89,7 +89,7 @@ def run_episode(state: RobotState, controller: RoboMasterController) -> RobotSta
     )
     state.last_user_command = None
 
-    results = brain.run_tools(
+    results = await brain.run_tools(
         content=user_content,
         system_prompt=SYSTEM_PROMPT,
         tools=VERBS,

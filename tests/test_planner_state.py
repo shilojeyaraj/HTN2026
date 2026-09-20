@@ -1,5 +1,6 @@
 """Planner state stays in the per-step message, never in indexed documents."""
 
+import asyncio
 import json
 
 from brain import loop
@@ -23,13 +24,13 @@ def test_planner_receives_dynamic_state_in_its_message(monkeypatch):
     monkeypatch.setattr(loop, "_perceive", lambda state, controller: state)
     monkeypatch.setattr(loop.command_parser, "parse", lambda command: None)
 
-    def run_tools(**kwargs):
+    async def run_tools(**kwargs):
         captured.update(kwargs)
         return [{"name": "turn", "arguments": {"degrees": 30}, "result": {"status": "completed"}}]
 
     monkeypatch.setattr(loop.brain, "run_tools", run_tools)
 
-    result = loop.run_episode(state, FakeController())
+    result = asyncio.run(loop.run_episode(state, FakeController()))
 
     assert json.loads(captured["content"]) == {
         "scene_description": "Clear path to the left.",

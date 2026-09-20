@@ -1,6 +1,7 @@
 """Static Backboard documents must never hold up planner requests for indexing."""
 
 import asyncio
+import logging
 from types import SimpleNamespace
 
 from brain.backboard_client import BackboardBrain, ENCOUNTERS
@@ -32,3 +33,32 @@ def test_static_documents_do_not_wait_for_indexing():
 
     assert len(brain.client.uploaded) == 2
     assert len(brain.client.memories) == len(ENCOUNTERS)
+
+
+def test_backboard_client_closes_once_at_shutdown():
+    class ClosingClient:
+        closed = 0
+
+        async def aclose(self):
+            self.closed += 1
+
+    brain = object.__new__(BackboardBrain)
+    brain.client = ClosingClient()
+
+    asyncio.run(brain.aclose())
+
+    assert brain.client is None
+
+
+def test_failed_planner_response_logs_parsed_payload(caplog):
+    class FailedResponse:
+        status = "FAILED"
+
+        def model_dump(self, **_kwargs):
+            return {"messages": [{"status": "FAILED", "error": "model unavailable"}]}
+
+    with caplog.at_level(logging.ERROR):
+        BackboardBrain._log_response("response", FailedResponse(), 0.1)
+
+    assert "parsed response type=FailedResponse" in caplog.text
+    assert "model unavailable" in caplog.text
