@@ -20,7 +20,11 @@ def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState
         if frame_jpeg is None:
             logger.warning("RoboMaster camera did not provide a frame")
         else:
-            state.scene_description = describe_scene(frame_jpeg)
+            description = describe_scene(frame_jpeg)
+            if description:
+                state.scene_description = description
+            else:
+                logger.warning("vision returned no scene description; keeping prior scene")
     except Exception:
         logger.warning("vision failed, keeping prior scene_description", exc_info=True)
     return state

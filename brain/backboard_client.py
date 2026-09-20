@@ -3,7 +3,6 @@
 SDK verified against backboard-sdk v1.5.19:
 - send_message returns ChatMessagesResponse (convenience properties proxy to last message)
 - submit_tool_outputs_simple takes thread_id + tool_outputs list
-- input_image= for vision (not files=)
 - call.function.arguments is a JSON string (not parsed_arguments)
 """
 
@@ -76,22 +75,6 @@ class BackboardBrain:
 
     def run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str = "off") -> list:
         return asyncio.run(self._run_tools(content, system_prompt, tools, execute_tool, memory))
-
-    async def _describe(self, content: str, image_path: str, llm_provider: str, model_name: str) -> str:
-        response = await self.client.send_message(
-            content=content,
-            input_image=image_path,
-            llm_provider=llm_provider,
-            model_name=model_name,
-            thread_id=self.thread_id,
-            assistant_id=self.assistant_id,
-        )
-        self.thread_id = response.thread_id
-        self.assistant_id = response.assistant_id
-        return response.content
-
-    def describe(self, content: str, image_path: str, llm_provider: str = "google", model_name: str = "gemini-3.5-flash") -> str:
-        return asyncio.run(self._describe(content, image_path, llm_provider, model_name))
 
     async def _ensure_initialized(self) -> None:
         """Create the assistant, upload knowledge base + encounter history for RAG, load encounters into memory."""
