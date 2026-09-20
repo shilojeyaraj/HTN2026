@@ -234,12 +234,8 @@ def test_malformed_raw_tool_calls_recover_without_sdk_parsing_crash(bad_call, mo
     assert json.loads(feedback[0]["output"])["status"] == "rejected"
 
 
-def test_parser_fast_path_uses_same_validation(monkeypatch):
-    mock_brain(monkeypatch, response())
-    monkeypatch.setattr(loop.command_parser, "parse", lambda _: {"verb": "turn", "args": {"angle": 30}})
+def test_planner_cannot_request_the_direct_mode_bypass():
     controller = Mock(spec=RoboMasterController)
-
-    state = asyncio.run(loop.run_episode(RobotState(last_user_command="turn"), controller))
-
-    assert state.last_action_result["result"]["status"] == "rejected"
+    result = loop._execute_verb("turn", {"degrees": 90, "direct": True}, RobotState(), controller)
+    assert result["status"] == "rejected"
     assert controller.mock_calls == []

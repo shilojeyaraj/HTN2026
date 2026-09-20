@@ -23,7 +23,6 @@ def test_planner_receives_dynamic_state_in_its_message(monkeypatch):
     )
 
     monkeypatch.setattr(loop, "_perceive", lambda state, controller: state)
-    monkeypatch.setattr(loop.command_parser, "parse", lambda command: None)
 
     async def run_tools(**kwargs):
         captured.update(kwargs)

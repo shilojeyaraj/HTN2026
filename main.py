@@ -1,4 +1,4 @@
-"""Run deliberative robot episodes against one RoboMaster EP Core connection."""
+"""Run direct commands or perceptual missions against one RoboMaster connection."""
 
 import argparse
 import asyncio
@@ -20,7 +20,7 @@ EPISODE_GAP_S = 1.0
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--goal", required=True, help="mission for the planner to pursue")
+    parser.add_argument("--goal", required=True, help="direct robot command or autonomous mission")
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,
@@ -33,6 +33,8 @@ async def main() -> None:
             try:
                 while True:
                     state = await run_episode(state, controller)
+                    if state.finished_goal is not None and state.finished_goal == state.current_goal:
+                        break
                     if reason := vision_unavailable_reason():
                         raise InferenceUnavailable(reason)
                     delay = max(EPISODE_GAP_S, vision_retry_delay())
