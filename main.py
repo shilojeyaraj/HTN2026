@@ -5,11 +5,11 @@ import time
 
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from brain.loop import run_episode
 from brain.state import RobotState
 from control.robomaster import RoboMasterController
-
-load_dotenv()
 
 EPISODE_GAP_S = 1.0
 
