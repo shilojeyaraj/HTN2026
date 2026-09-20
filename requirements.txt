@@ -10,3 +10,4 @@ sounddevice
 robomaster-sdk-modern
 opencv-python
 websockets
+pymongo

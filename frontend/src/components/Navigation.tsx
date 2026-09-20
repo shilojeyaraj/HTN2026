@@ -1,9 +1,11 @@
-import { History, LayoutDashboard } from 'lucide-react'
+import { Activity, BrainCircuit, History, LayoutDashboard } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Tab } from '../types'
 
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'telemetry', label: 'Telemetry', icon: Activity },
+  { id: 'brain', label: 'Brain', icon: BrainCircuit },
   { id: 'encounters', label: 'Encounters', icon: History },
 ]
 
