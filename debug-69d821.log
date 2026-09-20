@@ -1,6 +1,0 @@
-{"sessionId": "69d821", "hypothesisId": "D", "location": "query.py:main", "message": "dotenv loaded", "data": {"env_path": "C:\\Users\\Nickd\\SiegeBotDashboard\\.env", "env_exists": true, "has_mongodb_uri": true, "has_mongo_uri": false}, "timestamp": 1789870610656}
-{"sessionId": "69d821", "hypothesisId": "A", "location": "mongo.py:_get_db", "message": "env vars check", "data": {"has_mongodb_uri": true, "has_mongo_uri": false, "cwd": "C:\\Users\\Nickd\\SiegeBotDashboard"}, "timestamp": 1789870610662}
-{"sessionId": "69d821", "hypothesisId": "C", "location": "mongo.py:_get_db", "message": "connection success", "data": {"database": "htn2026_rescue"}, "timestamp": 1789870611636}
-{"sessionId": "69d821", "hypothesisId": "D", "location": "query.py:main", "message": "dotenv loaded", "data": {"env_path": "C:\\Users\\Nickd\\SiegeBotDashboard\\.env", "env_exists": true, "has_mongodb_uri": true, "has_mongo_uri": false}, "timestamp": 1789870615998}
-{"sessionId": "69d821", "hypothesisId": "A", "location": "mongo.py:_get_db", "message": "env vars check", "data": {"has_mongodb_uri": true, "has_mongo_uri": false, "cwd": "C:\\Users\\Nickd\\SiegeBotDashboard"}, "timestamp": 1789870616006}
-{"sessionId": "69d821", "hypothesisId": "C", "location": "mongo.py:_get_db", "message": "connection success", "data": {"database": "htn2026_rescue"}, "timestamp": 1789870616888}
