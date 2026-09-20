@@ -243,12 +243,51 @@ last_pose = (0.0, 0.0, 0.0)
 brain_initialized = False
 brain_loop_started = False
 victim_cooldown = 0.0  # don't trigger brain on every victim response
+brain_controlling = False  # pause auto-drive when brain is moving rover
+victim_pos = None  # last known victim position to steer toward
 
 
 def auto_drive_thread():
-    """Continuous auto-drive thread — rover always explores, map always builds up."""
+    """Continuous auto-drive thread — rover always explores, map always builds up.
+    Steers toward victims when detected, turns at map boundaries."""
     dt = 0.1
+    half_map = GRID_SIZE_M / 2 - 1.0  # stay 1m inside the boundary
     while True:
+        pose = rover.get_pose()
+        x, y, heading = pose
+
+        # If brain is controlling (called forward/turn), don't override
+        if brain_controlling:
+            time.sleep(dt)
+            continue
+
+        # Steer toward victim if known
+        if victim_pos is not None:
+            dx = victim_pos[0] - x
+            dy = victim_pos[1] - y
+            dist = math.sqrt(dx**2 + dy**2)
+            if dist > 0.5:
+                target_heading = math.degrees(math.atan2(dy, dx))
+                diff = ((target_heading - heading + 180) % 360) - 180
+                if abs(diff) > 10:
+                    rover.publish_cmd_vel(0.1, 0.3 if diff > 0 else -0.3)
+                else:
+                    rover.publish_cmd_vel(0.2, 0.0)
+            else:
+                rover.publish_cmd_vel(0.0, 0.0)  # reached victim
+            time.sleep(dt)
+            continue
+
+        # Boundary check — turn around if near edge
+        if abs(x) > half_map or abs(y) > half_map:
+            # Turn toward center
+            target_heading = math.degrees(math.atan2(-y, -x))
+            diff = ((target_heading - heading + 180) % 360) - 180
+            rover.publish_cmd_vel(0.0, 0.4 if diff > 0 else -0.4)
+            time.sleep(dt)
+            continue
+
+        # Normal obstacle avoidance
         dets = rover.get_detections()
         ahead = [d for d in dets if abs(d["bearing_deg"]) < 30 and d["distance_m"] < 0.8]
         if ahead:
@@ -269,9 +308,10 @@ def execute_tool(name, args):
     pose = rover.get_pose()
 
     if name == "forward":
+        global brain_controlling
+        brain_controlling = True
         dist = args.get("distance_m", 0.5)
         rover.publish_cmd_vel(0.3, 0.0)
-        # Move for a short time then stop
         target_dist = min(dist, 2.0)
         start_x, start_y, _ = pose
         while True:
@@ -283,31 +323,37 @@ def execute_tool(name, args):
             ahead = [d for d in dets if abs(d["bearing_deg"]) < 30 and d["distance_m"] < 0.3]
             if ahead:
                 rover.publish_cmd_vel(0.0, 0.0)
+                brain_controlling = False
                 result = {"status": "stopped_by_obstacle", "distance_m": ahead[0]["distance_m"]}
                 brain_activity.log_call(name, args, result)
                 db.log_brain_call(name, args, result, pose)
                 return result
             time.sleep(0.05)
         rover.publish_cmd_vel(0.0, 0.0)
+        brain_controlling = False
         result = {"status": "completed", "distance_m": dist}
         brain_activity.log_call(name, args, result)
         db.log_brain_call(name, args, result, pose)
         return result
 
     if name == "backward":
+        brain_controlling = True
         rover.publish_cmd_vel(-0.3, 0.0)
         time.sleep(min(args.get("distance_m", 0.5) / 0.3, 3.0))
         rover.publish_cmd_vel(0.0, 0.0)
+        brain_controlling = False
         result = {"status": "completed", "distance_m": args.get("distance_m", 0.5)}
         brain_activity.log_call(name, args, result)
         db.log_brain_call(name, args, result, pose)
         return result
 
     if name == "turn":
+        brain_controlling = True
         degrees = args.get("degrees", 0)
         rover.publish_cmd_vel(0.0, 60.0 if degrees > 0 else -60.0)
         time.sleep(min(abs(degrees) / 60.0, 3.0))
         rover.publish_cmd_vel(0.0, 0.0)
+        brain_controlling = False
         result = {"status": "completed", "degrees": degrees}
         brain_activity.log_call(name, args, result)
         db.log_brain_call(name, args, result, pose)
@@ -350,9 +396,14 @@ def execute_tool(name, args):
         victim_text = random.choice(victim_responses)
 
         def victim_responds():
-            global victim_cooldown
+            global victim_cooldown, victim_pos
             time.sleep(3.0)
             logger.info("[TTS] Victim: %s", victim_text)
+            # Set victim position from sound sources (first distress source)
+            distress = [s for s in sound_sources if s["kind"] == "distress"]
+            if distress:
+                victim_pos = (distress[0]["x"], distress[0]["y"])
+                logger.info("Victim position set: %s — auto-drive steering toward victim", victim_pos)
             transcript_messages.append({
                 "id": f"msg-{len(transcript_messages)}",
                 "speaker": "person",
