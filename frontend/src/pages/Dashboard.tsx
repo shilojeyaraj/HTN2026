@@ -1,3 +1,4 @@
+import { AINarrative } from '../components/AINarrative'
 import { BrainActivity } from '../components/BrainActivity'
 import { DrivingView3D } from '../components/DrivingView3D'
 import { MappingView3D } from '../components/MappingView3D'
@@ -17,17 +18,22 @@ export function Dashboard() {
         <MappingView3D payload={payload} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         <SensorGauges sensors={payload?.sensor_state ?? null} />
         <BrainActivity events={payload?.brain_activity ?? []} />
         <PatternInsightsCard insights={payload?.insights ?? null} />
+        <AINarrative
+          brainEvents={payload?.brain_activity ?? []}
+          sensors={payload?.sensor_state ?? null}
+          insights={payload?.insights ?? null}
+        />
       </div>
 
       <Transcript
         messages={activeEncounter.transcript}
         listening
         className="min-h-0"
-        bodyClassName="max-h-[320px]"
+        bodyClassName="max-h-[280px]"
       />
     </div>
   )

@@ -1,8 +1,8 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Grid, Line } from '@react-three/drei'
+import { OrbitControls, Grid, Line, Html } from '@react-three/drei'
 import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
-import type { MapPayload, SoundSource, HeatPoint, Hazard } from '../types'
+import type { MapPayload, SoundSource, HeatPoint, Hazard, Annotation } from '../types'
 
 function MappedRover({ pose }: { pose: [number, number, number] }) {
   const ref = useRef<THREE.Group>(null)
@@ -27,6 +27,23 @@ function MappedRover({ pose }: { pose: [number, number, number] }) {
         <meshStandardMaterial color="#bbf7d0" emissive="#22c55e" emissiveIntensity={0.6} />
       </mesh>
     </group>
+  )
+}
+
+function DetectionLabel({ position, text, color }: { position: [number, number, number]; text: string; color: string }) {
+  return (
+    <Html position={position} center distanceFactor={8} occlude>
+      <div
+        className="pointer-events-none whitespace-nowrap rounded-md px-2 py-1 text-[10px] font-semibold tracking-wide shadow-lg backdrop-blur-sm"
+        style={{
+          backgroundColor: `${color}22`,
+          border: `1px solid ${color}`,
+          color: color,
+        }}
+      >
+        {text}
+      </div>
+    </Html>
   )
 }
 
@@ -83,11 +100,15 @@ function MappedSounds({ sounds }: { sounds: SoundSource[] }) {
     <>
       {sounds.map((s, i) => {
         const color = s.kind === 'distress' ? '#ef4444' : s.kind === 'voice' ? '#38bdf8' : '#a78bfa'
+        const label = s.kind === 'distress' ? 'DISTRESS' : s.kind === 'voice' ? 'VOICE' : 'SPEECH'
         return (
-          <mesh key={i} position={[s.x, 0.3, -s.y]}>
-            <sphereGeometry args={[0.15, 12, 12]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} transparent opacity={0.7} />
-          </mesh>
+          <group key={i}>
+            <mesh position={[s.x, 0.3, -s.y]}>
+              <sphereGeometry args={[0.15, 12, 12]} />
+              <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} transparent opacity={0.7} />
+            </mesh>
+            <DetectionLabel position={[s.x, 0.6, -s.y]} text={`${label}: ${s.label}`} color={color} />
+          </group>
         )
       })}
     </>
@@ -101,10 +122,13 @@ function MappedHeat({ heat }: { heat: HeatPoint[] }) {
         const color = h.status === 'overheat' ? '#ef4444' : '#f59e0b'
         const radius = h.status === 'overheat' ? 0.8 : 0.5
         return (
-          <mesh key={i} position={[h.x, 0.05, -h.y]}>
-            <sphereGeometry args={[radius, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshStandardMaterial color={color} transparent opacity={0.2} emissive={color} emissiveIntensity={0.3} side={THREE.DoubleSide} />
-          </mesh>
+          <group key={i}>
+            <mesh position={[h.x, 0.05, -h.y]}>
+              <sphereGeometry args={[radius, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+              <meshStandardMaterial color={color} transparent opacity={0.2} emissive={color} emissiveIntensity={0.3} side={THREE.DoubleSide} />
+            </mesh>
+            <DetectionLabel position={[h.x, 0.8, -h.y]} text={`${h.celsius}°C ${h.status.toUpperCase()}`} color={color} />
+          </group>
         )
       })}
     </>
@@ -115,10 +139,23 @@ function MappedHazards({ hazards }: { hazards: Hazard[] }) {
   return (
     <>
       {hazards.map((h, i) => (
-        <mesh key={i} position={[h.x, 0.4, -h.y]}>
-          <coneGeometry args={[0.15, 0.3, 4]} />
-          <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
-        </mesh>
+        <group key={i}>
+          <mesh position={[h.x, 0.4, -h.y]}>
+            <coneGeometry args={[0.15, 0.3, 4]} />
+            <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
+          </mesh>
+          <DetectionLabel position={[h.x, 0.7, -h.y]} text={`HAZARD: ${h.type.toUpperCase()}`} color="#ef4444" />
+        </group>
+      ))}
+    </>
+  )
+}
+
+function MappedAnnotations({ annotations }: { annotations: Annotation[] }) {
+  return (
+    <>
+      {annotations.map((a, i) => (
+        <DetectionLabel key={i} position={[a.x, 0.5, -a.y]} text={a.text} color="#7dd3fc" />
       ))}
     </>
   )
@@ -165,24 +202,17 @@ export function MappingView3D({ payload }: { payload: MapPayload | null }) {
           position={[0, 0.01, 0]}
         />
 
-        {/* Mapped obstacles from occupancy grid */}
         <MappedObstacles payload={payload} />
 
-        {/* Trail */}
         {payload?.trail && payload.trail.length > 1 && (
           <Trail3D trail={payload.trail} />
         )}
 
-        {/* Sound markers */}
         <MappedSounds sounds={payload?.sound_sources || []} />
-
-        {/* Heat domes */}
         <MappedHeat heat={payload?.heat_points || []} />
-
-        {/* Hazard markers */}
         <MappedHazards hazards={payload?.hazards || []} />
+        <MappedAnnotations annotations={payload?.annotations || []} />
 
-        {/* Rover position */}
         <MappedRover pose={payload?.rover_pose ?? [0, 0, 0]} />
 
         <OrbitControls
@@ -196,7 +226,7 @@ export function MappingView3D({ payload }: { payload: MapPayload | null }) {
         />
       </Canvas>
       <div className="absolute left-3 top-3 rounded bg-black/60 px-2 py-1 text-[11px] font-semibold tracking-wider text-cyan-400 uppercase backdrop-blur-sm">
-        3D Occupancy Map
+        3D Occupancy Map — LiDAR + Sensor Fusion
       </div>
     </div>
   )

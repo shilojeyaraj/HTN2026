@@ -1,125 +1,121 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
-import { useRef } from 'react'
+import { OrbitControls, Environment, ContactShadows } from '@react-three/drei'
+import { useRef, useMemo } from 'react'
 import * as THREE from 'three'
 import type { MapPayload } from '../types'
 
-function RoverChase({ pose }: { pose: [number, number, number] }) {
+function Rover({ pose }: { pose: [number, number, number] }) {
   const ref = useRef<THREE.Group>(null)
   const [x, y, heading] = pose
   const headingRad = (heading * Math.PI) / 180
 
-  useFrame(({ camera }) => {
+  useFrame(() => {
     if (ref.current) {
       ref.current.position.set(x, 0, -y)
       ref.current.rotation.y = -headingRad
-      // Chase camera follows behind rover
-      const behindX = x - Math.cos(headingRad) * 3
-      const behindZ = -y + Math.sin(headingRad) * 3
-      camera.position.lerp(new THREE.Vector3(behindX, 2.5, behindZ), 0.05)
-      camera.lookAt(x, 0.5, -y)
     }
   })
 
   return (
     <group ref={ref}>
-      {/* Rover body */}
-      <mesh castShadow position={[0, 0.2, 0]}>
-        <boxGeometry args={[0.5, 0.25, 0.35]} />
-        <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.2} />
+      {/* Body */}
+      <mesh castShadow position={[0, 0.25, 0]}>
+        <boxGeometry args={[0.6, 0.3, 0.4]} />
+        <meshStandardMaterial color="#22c55e" metalness={0.3} roughness={0.4} emissive="#22c55e" emissiveIntensity={0.15} />
       </mesh>
-      {/* LiDAR dome on top */}
-      <mesh position={[0, 0.4, 0]}>
-        <cylinderGeometry args={[0.1, 0.12, 0.08, 16]} />
-        <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.2} />
+      {/* Cabin */}
+      <mesh castShadow position={[0, 0.45, 0]}>
+        <boxGeometry args={[0.4, 0.2, 0.35]} />
+        <meshStandardMaterial color="#1e293b" metalness={0.6} roughness={0.2} />
+      </mesh>
+      {/* LiDAR unit */}
+      <mesh position={[0, 0.6, 0]}>
+        <cylinderGeometry args={[0.08, 0.1, 0.06, 16]} />
+        <meshStandardMaterial color="#334155" metalness={0.9} roughness={0.1} />
+      </mesh>
+      {/* Rotating LiDAR beam */}
+      <mesh position={[0, 0.6, 0]} rotation={[0, 0, 0]}>
+        <boxGeometry args={[0.02, 0.02, 1.5]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={1} transparent opacity={0.4} />
       </mesh>
       {/* Wheels */}
-      {[[0.2, -0.18], [0.2, 0.18], [-0.2, -0.18], [-0.2, 0.18]].map(([wx, wz], i) => (
-        <mesh key={i} position={[wx, 0.07, wz]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.07, 0.07, 0.05, 16]} />
-          <meshStandardMaterial color="#0f172a" />
+      {[[0.25, -0.22], [0.25, 0.22], [-0.25, -0.22], [-0.25, 0.22]].map(([wx, wz], i) => (
+        <mesh key={i} position={[wx, 0.1, wz]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[0.1, 0.1, 0.06, 16]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.8} />
         </mesh>
       ))}
-      {/* LiDAR sweep beam */}
-      <LiDARSweep />
+      {/* Headlights */}
+      <mesh position={[0.3, 0.25, 0.15]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#fef3c7" emissive="#fde68a" emissiveIntensity={2} />
+      </mesh>
+      <mesh position={[0.3, 0.25, -0.15]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshStandardMaterial color="#fef3c7" emissive="#fde68a" emissiveIntensity={2} />
+      </mesh>
     </group>
   )
 }
 
-function LiDARSweep() {
-  const ref = useRef<THREE.Mesh>(null)
-  useFrame(({ clock }) => {
-    if (ref.current) {
-      const t = clock.getElapsedTime()
-      ref.current.rotation.y = t * 3
-    }
-  })
+function Building({ position, size, color }: { position: [number, number, number]; size: [number, number, number]; color: string }) {
   return (
-    <mesh position={[0, 0.4, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-      <coneGeometry args={[0.8, 2.5, 32, 1, true, 0, Math.PI / 6]} />
-      <meshStandardMaterial
-        color="#22d3ee"
-        transparent
-        opacity={0.08}
-        side={THREE.DoubleSide}
-        emissive="#22d3ee"
-        emissiveIntensity={0.3}
-      />
+    <mesh position={position} castShadow receiveShadow>
+      <boxGeometry args={size} />
+      <meshStandardMaterial color={color} roughness={0.7} metalness={0.1} />
     </mesh>
   )
 }
 
-function TerrainObstacles({ payload }: { payload: MapPayload | null }) {
-  const obstacles = useRef<{ x: number; y: number; height: number; type: string }[]>([])
-
-  // Static environment that the rover drives through
-  if (obstacles.current.length === 0 && payload) {
-    const items = [
-      { x: 3, y: 2, height: 2.0, type: 'building' },
-      { x: -2, y: 4, height: 1.5, type: 'wall' },
-      { x: 5, y: -3, height: 1.8, type: 'building' },
-      { x: -4, y: -2, height: 1.2, type: 'rubble' },
-      { x: 1, y: 6, height: 2.5, type: 'building' },
-      { x: 6, y: 3, height: 1.0, type: 'debris' },
-      { x: -5, y: 1, height: 1.6, type: 'wall' },
-      { x: 2, y: -5, height: 2.2, type: 'building' },
-      { x: -3, y: -4, height: 0.8, type: 'rubble' },
-      { x: 7, y: 0, height: 1.4, type: 'wall' },
-    ]
-    obstacles.current = items
-  }
-
+function RubblePile({ position }: { position: [number, number, number] }) {
   return (
-    <>
-      {obstacles.current.map((obs, i) => (
-        <mesh key={i} position={[obs.x, obs.height / 2, -obs.y]} castShadow>
-          {obs.type === 'building' ? (
-            <boxGeometry args={[1.0, obs.height, 1.0]} />
-          ) : obs.type === 'wall' ? (
-            <boxGeometry args={[2.0, obs.height, 0.2]} />
-          ) : (
-            <dodecahedronGeometry args={[obs.height * 0.4, 0]} />
-          )}
-          <meshStandardMaterial
-            color={obs.type === 'building' ? '#475569' : obs.type === 'wall' ? '#64748b' : '#78716c'}
-            transparent
-            opacity={0.7}
-          />
+    <group position={position}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <mesh
+          key={i}
+          position={[
+            (Math.sin(i * 2.3) * 0.3),
+            0.2 + i * 0.15,
+            (Math.cos(i * 1.7) * 0.3),
+          ]}
+          rotation={[Math.random(), Math.random(), Math.random()]}
+          castShadow
+        >
+          <dodecahedronGeometry args={[0.25 + i * 0.05, 0]} />
+          <meshStandardMaterial color="#78716c" roughness={0.9} />
         </mesh>
       ))}
-    </>
+    </group>
   )
 }
 
-function GroundGrid() {
+function DustParticles() {
+  const ref = useRef<THREE.Points>(null)
+  const count = 200
+
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3)
+    for (let i = 0; i < count; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 20
+      arr[i * 3 + 1] = Math.random() * 3
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 20
+    }
+    return arr
+  }, [])
+
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      ref.current.rotation.y = clock.getElapsedTime() * 0.02
+    }
+  })
+
   return (
-    <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[50, 50]} />
-        <meshStandardMaterial color="#0f1729" metalness={0.1} roughness={0.95} />
-      </mesh>
-      <gridHelper args={[50, 50, '#1e3a5f', '#0f1729']} position={[0, 0.01, 0]} />
-    </>
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.03} color="#94a3b8" transparent opacity={0.3} sizeAttenuation />
+    </points>
   )
 }
 
@@ -130,18 +126,58 @@ export function DrivingView3D({ payload }: { payload: MapPayload | null }) {
     <div className="relative w-full" style={{ aspectRatio: '16 / 10' }}>
       <Canvas
         shadows
-        camera={{ position: [3, 3, 3], fov: 65 }}
+        camera={{ position: [3, 2.5, 4], fov: 65 }}
         gl={{ antialias: true, alpha: false }}
       >
-        <color attach="background" args={['#050810']} />
-        <ambientLight intensity={0.25} />
-        <directionalLight position={[10, 20, 10]} intensity={0.6} castShadow />
-        <pointLight position={[0, 3, 0]} intensity={0.3} color="#22d3ee" />
-        <fog attach="fog" args={['#050810', 10, 30]} />
+        <color attach="background" args={['#0a0f1a']} />
+        <fog attach="fog" args={['#0a0f1a', 8, 25]} />
 
-        <GroundGrid />
-        <TerrainObstacles payload={payload} />
-        <RoverChase pose={roverPose} />
+        {/* Lighting */}
+        <ambientLight intensity={0.15} />
+        <directionalLight
+          position={[8, 15, 8]}
+          intensity={0.4}
+          castShadow
+          shadow-mapSize={[2048, 2048]}
+          shadow-camera-far={30}
+          shadow-camera-left={-15}
+          shadow-camera-right={15}
+          shadow-camera-top={15}
+          shadow-camera-bottom={-15}
+        />
+        <Environment preset="night" />
+
+        {/* Ground */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[50, 50]} />
+          <meshStandardMaterial color="#1a1f2e" roughness={1} metalness={0} />
+        </mesh>
+        <gridHelper args={[50, 50, '#1e3a5f', '#0f1729']} position={[0, 0.01, 0]} />
+
+        {/* Buildings */}
+        <Building position={[4, 1.5, -3]} size={[2, 3, 2]} color="#3b4252" />
+        <Building position={[-3, 1.2, -5]} size={[1.5, 2.4, 1.5]} color="#4c5566" />
+        <Building position={[6, 2, 2]} size={[2.5, 4, 2.5]} color="#374151" />
+        <Building position={[-5, 1, 3]} size={[1.8, 2, 1.8]} color="#4b5563" />
+        <Building position={[2, 1.8, -7]} size={[2, 3.6, 2]} color="#3f4756" />
+        <Building position={[-6, 0.8, -1]} size={[1.2, 1.6, 1.2]} color="#525b6a" />
+
+        {/* Walls */}
+        <Building position={[0, 0.6, 5]} size={[4, 1.2, 0.2]} color="#475569" />
+        <Building position={[-7, 0.5, -3]} size={[0.2, 1, 4]} color="#475569" />
+
+        {/* Rubble piles */}
+        <RubblePile position={[1, 0, 2]} />
+        <RubblePile position={[-2, 0, -3]} />
+        <RubblePile position={[5, 0, -1]} />
+
+        {/* Dust atmosphere */}
+        <DustParticles />
+
+        {/* Rover */}
+        <Rover pose={roverPose} />
+
+        <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={20} blur={2} far={5} />
 
         <OrbitControls
           enablePan
@@ -153,7 +189,7 @@ export function DrivingView3D({ payload }: { payload: MapPayload | null }) {
         />
       </Canvas>
       <div className="absolute left-3 top-3 rounded bg-black/60 px-2 py-1 text-[11px] font-semibold tracking-wider text-cyan-400 uppercase backdrop-blur-sm">
-        LiDAR Scan View
+        Rescue Rover — Live View
       </div>
     </div>
   )
