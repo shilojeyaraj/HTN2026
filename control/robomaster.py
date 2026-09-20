@@ -91,7 +91,8 @@ class RoboMasterController:
                 self._robotic_arm = getattr(ep, "robotic_arm", None)
                 self._gripper = getattr(ep, "gripper", None)
                 self._subscribe_telemetry()
-                logger.info("connected to RoboMaster EP Core in STA mode")
+                logger.info("connected to RoboMaster EP Core in STA mode; robot_type=%s chassis_type=%s",
+                            type(ep), type(self._chassis))
                 return self
             except Exception as exc:
                 self._stop_safely(chassis=getattr(ep, "chassis", None))
@@ -200,7 +201,8 @@ class RoboMasterController:
                 "chassis action=%s starting: x=%.2fm y=%.2fm z=%.1fdeg xy_speed=%.2fm/s z_speed=%.1fdeg/s",
                 action, x, y, z, xy_speed, z_speed,
             )
-            self.chassis.move(x=x, y=y, z=z, xy_speed=xy_speed, z_speed=z_speed).wait_for_completed()
+            sdk_action = self.chassis.move(x=x, y=y, z=z, xy_speed=xy_speed, z_speed=z_speed)
+            self._wait_for_action(action, sdk_action)
             logger.info(
                 "chassis action=%s completed duration_s=%.2f; telemetry=%s",
                 action, time.monotonic() - started, self.get_chassis_state(),
@@ -211,6 +213,30 @@ class RoboMasterController:
             logger.exception("chassis action=%s failed duration_s=%.2f; stop requested",
                              action, time.monotonic() - started)
             raise RoboMasterError(f"RoboMaster movement failed: {exc}") from exc
+
+    def _wait_for_action(self, name: str, action) -> None:
+        """SDK 'completed' includes rejected/failed actions; require actual success."""
+        logger.info("SDK action=%s type=%s repr=%r state=%r", name, type(action), action,
+                    getattr(action, "state", None))
+        started = time.monotonic()
+        wait_result = None
+        try:
+            wait_result = action.wait_for_completed()
+        finally:
+            logger.info(
+                "SDK action=%s wait_for_completed=%r elapsed_s=%.3f repr=%r "
+                "state=%r is_completed=%r has_succeeded=%r has_failed=%r failure_reason=%r",
+                name, wait_result, time.monotonic() - started, action,
+                getattr(action, "state", None), getattr(action, "is_completed", None),
+                getattr(action, "has_succeeded", None), getattr(action, "has_failed", None),
+                getattr(action, "failure_reason", None),
+            )
+        if wait_result is not True or getattr(action, "has_succeeded", None) is not True:
+            raise RoboMasterError(
+                f"{name} SDK action did not succeed: wait_result={wait_result!r}, "
+                f"state={getattr(action, 'state', None)!r}, "
+                f"failure_reason={getattr(action, 'failure_reason', None)!r}"
+            )
 
     def stop(self) -> dict:
         try:
@@ -228,7 +254,7 @@ class RoboMasterController:
         if not x_mm and not y_mm:
             raise ValueError("move_arm requires a non-zero x_mm or y_mm")
         try:
-            self.robotic_arm.move(x=x_mm, y=y_mm).wait_for_completed()
+            self._wait_for_action("move_arm", self.robotic_arm.move(x=x_mm, y=y_mm))
             return {"status": "completed"}
         except Exception as exc:
             self._stop_arm_safely()
@@ -237,7 +263,7 @@ class RoboMasterController:
 
     def recenter_arm(self) -> dict:
         try:
-            self.robotic_arm.recenter().wait_for_completed()
+            self._wait_for_action("recenter_arm", self.robotic_arm.recenter())
             return {"status": "completed"}
         except Exception as exc:
             self._stop_arm_safely()

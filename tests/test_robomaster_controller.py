@@ -9,10 +9,16 @@ from control.robomaster import RoboMasterController, RoboMasterError
 class Action:
     def __init__(self, error=None):
         self.error = error
+        self.state = "action_succeeded"
+        self.is_completed = True
+        self.has_succeeded = True
+        self.has_failed = False
+        self.failure_reason = None
 
     def wait_for_completed(self):
         if self.error:
             raise self.error
+        return True
 
 
 class Chassis:
@@ -171,7 +177,7 @@ def test_motion_logs_requested_clamped_speed_and_duration(name, args, coordinate
 
     ep = EP()
     controller = make_controller(ep).connect()
-    ticks = iter((100.0, 101.25))
+    ticks = iter((100.0, 100.0, 101.25, 101.25))
     monkeypatch.setattr("control.robomaster.time.monotonic", lambda: next(ticks))
 
     with caplog.at_level(logging.INFO):
@@ -193,6 +199,85 @@ def test_failed_move_requests_stop_before_raising():
         controller.forward(0.2)
 
     assert ep.chassis.stops[-1] == {"x": 0, "y": 0, "z": 0}
+
+
+@pytest.mark.parametrize("state_name", ["ACTION_REJECTED", "ACTION_FAILED", "ACTION_EXCEPTION"])
+def test_real_sdk_terminal_failure_is_not_reported_as_success(state_name, caplog):
+    import logging
+    from robomaster import action
+    from robomaster.chassis import ChassisMoveAction
+
+    # Real SDK lifecycle object, with no dispatcher, socket, or robot connection.
+    sdk_action = ChassisMoveAction(x=0.15, spd_xy=0.7, spd_z=90)
+    sdk_action._changeto_state(getattr(action, state_name))
+    assert sdk_action.wait_for_completed() is True  # The bug: this doesn't mean success.
+    assert sdk_action.has_succeeded is False
+    ep = EP()
+    ep.chassis.next_action = sdk_action
+    controller = make_controller(ep).connect()
+
+    with caplog.at_level(logging.INFO), pytest.raises(RoboMasterError, match="SDK action did not succeed"):
+        controller.forward(0.15)
+
+    assert ep.chassis.stops == [{"x": 0, "y": 0, "z": 0}]
+    assert "type=<class 'robomaster.chassis.ChassisMoveAction'>" in caplog.text
+    assert "repr=action_id:" in caplog.text and "x:0.15" in caplog.text
+    assert "wait_for_completed=True" in caplog.text and "has_succeeded=False" in caplog.text
+    assert f"state={sdk_action.state!r}" in caplog.text and "elapsed_s=" in caplog.text
+    assert "chassis action=forward completed" not in caplog.text
+
+
+@pytest.mark.parametrize("wait_result", [False, None])
+def test_unsuccessful_wait_requests_stop_even_if_state_claims_success(wait_result):
+    ep = EP()
+    ep.chassis.next_action.wait_for_completed = lambda: wait_result
+    controller = make_controller(ep).connect()
+
+    with pytest.raises(RoboMasterError, match="SDK action did not succeed"):
+        controller.forward(0.15)
+
+    assert ep.chassis.stops == [{"x": 0, "y": 0, "z": 0}]
+
+
+def test_move_really_blocks_on_sdk_action_before_returning(monkeypatch):
+    import threading
+    from robomaster import action
+    from robomaster.chassis import ChassisMoveAction
+
+    sdk_action = ChassisMoveAction(x=0.15, spd_xy=0.7, spd_z=90)
+    sdk_action._changeto_state(action.ACTION_STARTED)
+    entered, finished = threading.Event(), threading.Event()
+    real_wait = sdk_action.wait_for_completed
+
+    def wait():
+        entered.set()
+        return real_wait()
+
+    monkeypatch.setattr(sdk_action, "wait_for_completed", wait)
+    ep = EP()
+    ep.chassis.next_action = sdk_action
+    controller = make_controller(ep).connect()
+    results = []
+
+    def move():
+        try:
+            results.append(controller.forward(0.15))
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=move, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        assert not finished.wait(0.03)
+        assert ep.chassis.stops == []  # No premature stop immediately after move().
+    finally:
+        sdk_action._changeto_state(action.ACTION_SUCCEEDED)
+        worker.join(timeout=1)
+
+    assert not worker.is_alive()
+    assert results == [{"status": "completed"}]
+    assert ep.chassis.stops == []
 
 
 def test_arm_and_gripper_commands_use_the_sdk_modules():

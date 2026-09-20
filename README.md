@@ -14,6 +14,16 @@ Connect the laptop to the RoboMaster's Wi-Fi network before running anything tha
 
 ## Physical smoke test
 
+To diagnose chassis execution using the same controller and speeds as the application:
+
+```sh
+python3 robomaster_motion_smoke_test.py
+```
+
+This standalone script connects to the real robot, moves forward 0.25 m, waits one second, turns 45°, stops, and closes the SDK connection even on failure. It does not invoke perception, planning, or simulation. Run it explicitly with clear space around the loaner robot.
+
+Controller logs include the real SDK action type/repr, state, `wait_for_completed()` result, success/failure flags, failure reason, and elapsed wall time. The SDK's wait returning `True` means the action ended, which includes rejected/failed actions. The controller requires `has_succeeded=True` before reporting completion; otherwise it stops and raises an error. Telemetry is sampled asynchronously, so a cached position in the completion log is not independent proof of displacement.
+
 With clear space around the robot, run:
 
 ```sh
