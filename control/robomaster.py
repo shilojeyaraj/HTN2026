@@ -30,7 +30,7 @@ def _telemetry_tuple(*values) -> tuple:
 
 
 class RoboMasterController:
-    """One AP-mode RoboMaster connection, shared by all robot tools."""
+    """One STA-mode RoboMaster connection, shared by all robot tools."""
 
     def __init__(self, *, robot_factory=None, camera_module=None, sleep=time.sleep):
         self._robot_factory = robot_factory
@@ -195,7 +195,16 @@ class RoboMasterController:
         if not 10 <= z_speed <= 540:
             raise ValueError("z_speed must be in [10, 540]")
         try:
+            logger.info(
+                "chassis move starting: x=%.2fm y=%.2fm z=%.1fdeg xy_speed=%.2fm/s z_speed=%.1fdeg/s",
+                x, y, z, xy_speed, z_speed,
+            )
+            started = time.monotonic()
             self.chassis.move(x=x, y=y, z=z, xy_speed=xy_speed, z_speed=z_speed).wait_for_completed()
+            logger.info(
+                "chassis move completed in %.2fs; telemetry=%s",
+                time.monotonic() - started, self.get_chassis_state(),
+            )
             return {"status": "completed"}
         except Exception as exc:
             self._stop_safely()
@@ -204,6 +213,7 @@ class RoboMasterController:
 
     def stop(self) -> dict:
         try:
+            logger.info("chassis stop requested")
             self.chassis.drive_speed(x=0, y=0, z=0)
             return {"status": "completed"}
         except Exception as exc:
@@ -280,6 +290,7 @@ class RoboMasterController:
                 # Older SDK releases do not accept resolution but still provide 360p.
                 self.camera.start_video_stream(display=False)
             self._camera_started = True
+            logger.info("RoboMaster camera stream started")
         self._sleep(CAMERA_WARMUP_S)
         return True
 

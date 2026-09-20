@@ -1,6 +1,7 @@
 """Run deliberative robot episodes against one RoboMaster EP Core connection."""
 
 import argparse
+import logging
 import time
 
 from dotenv import load_dotenv
@@ -19,6 +20,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--goal", required=True, help="mission for the planner to pursue")
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
     state = RobotState(current_goal=args.goal)
     try:

@@ -8,10 +8,14 @@ SDK verified against backboard-sdk v1.5.19:
 
 import asyncio
 import json
+import logging
 import os
 import threading
+import time
 
 from backboard import BackboardClient
+
+logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 6
 
@@ -39,6 +43,8 @@ class BackboardBrain:
 
     async def _run_tools(self, content: str, system_prompt: str, tools: list[dict], execute_tool, memory: str) -> list:
         await self._ensure_initialized()
+        logger.info("Backboard planner: sending request to %s/%s", self.llm_provider, self.model_name)
+        started = time.monotonic()
         response = await self.client.send_message(
             content=content,
             system_prompt=system_prompt,
@@ -49,6 +55,7 @@ class BackboardBrain:
             assistant_id=self.assistant_id,
             memory=memory,
         )
+        logger.info("Backboard planner: response %s in %.2fs", response.status, time.monotonic() - started)
         self.thread_id = response.thread_id
         self.assistant_id = response.assistant_id
 
@@ -62,13 +69,18 @@ class BackboardBrain:
             tool_outputs = []
             for call in response.tool_calls:
                 args = json.loads(call.function.arguments)
+                logger.info("Backboard planner: executing %s(%s)", call.function.name, args)
                 result = execute_tool(call.function.name, args)
+                logger.info("Backboard planner: %s returned %s", call.function.name, result)
                 results.append({"name": call.function.name, "arguments": args, "result": result})
                 tool_outputs.append({"tool_call_id": call.id, "output": json.dumps(result)})
 
+            logger.info("Backboard planner: submitting %d tool result(s)", len(tool_outputs))
+            started = time.monotonic()
             response = await self.client.submit_tool_outputs_simple(
                 thread_id=response.thread_id, tool_outputs=tool_outputs,
             )
+            logger.info("Backboard planner: follow-up response %s in %.2fs", response.status, time.monotonic() - started)
             rounds += 1
 
         return results
@@ -79,9 +91,11 @@ class BackboardBrain:
     async def _ensure_initialized(self) -> None:
         """Create the assistant, upload knowledge base + encounter history for RAG, load encounters into memory."""
         if self.assistant_id is None:
+            logger.info("Backboard planner: creating assistant")
             assistant = await self.client.create_assistant(name="rescue-rover-brain")
             self.assistant_id = assistant.assistant_id
         if not self._knowledge_uploaded:
+            logger.info("Backboard planner: uploading knowledge base")
             kb_dir = os.path.join(os.path.dirname(__file__), "..", "knowledge")
             for doc in ["rescue_protocols.md", "encounter_history.md"]:
                 path = os.path.join(kb_dir, doc)
@@ -92,15 +106,19 @@ class BackboardBrain:
                         pass
             self._knowledge_uploaded = True
             # Wait for documents to finish indexing
-            for _ in range(30):
+            logger.info("Backboard planner: waiting for knowledge indexing")
+            for attempt in range(30):
                 try:
                     docs = await self.client.list_assistant_documents(self.assistant_id)
                     if all(d.status == "completed" for d in docs):
                         break
                 except Exception:
                     pass
+                if attempt % 5 == 4:
+                    logger.info("Backboard planner: knowledge still indexing (%ds)", (attempt + 1) * 2)
                 await asyncio.sleep(2)
         if not self._encounters_loaded:
+            logger.info("Backboard planner: loading encounter memory")
             for enc in ENCOUNTERS:
                 try:
                     await self.client.add_memory(

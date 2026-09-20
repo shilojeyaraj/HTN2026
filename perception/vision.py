@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,8 @@ def describe_scene(jpeg_bytes: bytes) -> str | None:
     try:
         from google.genai import types
 
+        logger.info("Gemini vision: sending %d-byte JPEG", len(jpeg_bytes))
+        started = time.monotonic()
         response = _get_client(api_key).models.generate_content(
             model=MODEL,
             contents=[
@@ -49,7 +52,9 @@ def describe_scene(jpeg_bytes: bytes) -> str | None:
                 PROMPT,
             ],
         )
-        return response.text.strip() if response.text else None
+        description = response.text.strip() if response.text else None
+        logger.info("Gemini vision: completed in %.2fs", time.monotonic() - started)
+        return description
     except Exception:
         logger.warning("Gemini vision request failed", exc_info=True)
         return None

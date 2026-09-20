@@ -16,10 +16,12 @@ logger = logging.getLogger(__name__)
 
 def _perceive(state: RobotState, controller: RoboMasterController) -> RobotState:
     try:
+        logger.info("perception: requesting latest camera frame")
         frame_jpeg = get_latest_frame(controller)
         if frame_jpeg is None:
             logger.warning("RoboMaster camera did not provide a frame")
         else:
+            logger.info("perception: received %d-byte JPEG", len(frame_jpeg))
             description = describe_scene(frame_jpeg)
             if description:
                 state.scene_description = description
@@ -62,6 +64,7 @@ def _execute_verb(name: str, args: dict, state: RobotState, controller: RoboMast
 
 
 def run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
+    logger.info("episode: starting goal=%r", state.current_goal)
     state = _perceive(state, controller)
 
     if state.last_user_command:
@@ -80,11 +83,12 @@ def run_episode(state: RobotState, controller: RoboMasterController) -> RobotSta
     )
     state.last_user_command = None
 
-    brain.run_tools(
+    results = brain.run_tools(
         content=user_content,
         system_prompt=SYSTEM_PROMPT,
         tools=VERBS,
         execute_tool=lambda name, args: _execute_verb(name, args, state, controller),
         memory="Auto",
     )
+    logger.info("episode: planner completed %d tool call(s)", len(results))
     return state
