@@ -10,6 +10,7 @@ load_dotenv()
 from brain.loop import run_episode
 from brain.state import RobotState
 from control.robomaster import RoboMasterController
+from perception.vision import close_vision_client
 
 EPISODE_GAP_S = 1.0
 
@@ -20,10 +21,13 @@ def main() -> None:
     args = parser.parse_args()
 
     state = RobotState(current_goal=args.goal)
-    with RoboMasterController() as controller:
-        while True:
-            state = run_episode(state, controller)
-            time.sleep(EPISODE_GAP_S)
+    try:
+        with RoboMasterController() as controller:
+            while True:
+                state = run_episode(state, controller)
+                time.sleep(EPISODE_GAP_S)
+    finally:
+        close_vision_client()
 
 
 if __name__ == "__main__":
