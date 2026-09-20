@@ -14,12 +14,16 @@ from brain.config import STARTUP_SCAN_ENABLED
 from brain.backboard_client import brain
 from brain.state import RobotState
 from control.robomaster import RoboMasterController
+from control.map_server import MapServer
+from control.telemetry import rover_snapshot
 from perception.vision import aclose_vision_client
 from shared.inference import InferenceUnavailable
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--goal", help="direct command or mission; omit to scan once, then monitor")
+    parser.add_argument("--telemetry-host", default="0.0.0.0", help="dashboard WebSocket bind address")
+    parser.add_argument("--telemetry-port", type=int, default=8766, help="dashboard WebSocket port")
     args = parser.parse_args()
     logging.basicConfig(
         level=logging.INFO,
@@ -27,11 +31,18 @@ async def main() -> None:
     )
 
     state = RobotState(current_goal=args.goal)
+    controller = RoboMasterController()
+    server = MapServer(get_snapshot=lambda: rover_snapshot(controller, state))
+    state.telemetry.update(goal=args.goal, phase="connecting", reason="Connecting to RoboMaster")
     try:
-        with RoboMasterController() as controller:
+        server.start(args.telemetry_host, args.telemetry_port)
+        with controller:
+            state.telemetry.update(phase="idle", reason="Starting mission" if args.goal else
+                                   ("Starting scan" if STARTUP_SCAN_ENABLED else "Monitoring"))
             try:
                 while True:
                     if not args.goal and (not STARTUP_SCAN_ENABLED or state.startup_scan_status == "completed"):
+                        state.telemetry.update(phase="idle", reason="Monitoring")
                         await asyncio.sleep(0.2)
                         continue
                     state = await run_episode(state, controller)
@@ -42,9 +53,14 @@ async def main() -> None:
                         logging.getLogger(__name__).info("episode: transient failure; retry in %.2fs", delay)
                         await asyncio.sleep(delay)
             except InferenceUnavailable as exc:
+                state.telemetry.update(phase="failed", reason=str(exc))
                 logging.getLogger(__name__).error("Mission stopped: %s", exc)
                 controller.stop()
+    except BaseException as exc:
+        state.telemetry.update(phase="failed", reason=str(exc) or "Mission interrupted")
+        raise
     finally:
+        server.close()
         try:
             await brain.aclose()
         finally:

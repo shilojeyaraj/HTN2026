@@ -34,6 +34,7 @@ export function Encounters() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
+        <p className="text-sm text-warn">Sample encounters — live history is not connected.</p>
         <h1 className="text-xl font-semibold tracking-wide text-ink">Previous Encounters</h1>
         <p className="text-sm text-ink-muted">
           {visible.length} of {encounters.length} records

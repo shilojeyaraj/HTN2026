@@ -64,7 +64,7 @@ export function MapView() {
   const { payload, connected } = useMapStream()
   const containerRef = useRef<HTMLDivElement>(null)
   const payloadRef = useRef<MapPayload | null>(payload)
-  payloadRef.current = payload
+  useEffect(() => { payloadRef.current = payload }, [payload])
 
   useEffect(() => {
     const container = containerRef.current

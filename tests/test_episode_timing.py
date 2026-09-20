@@ -26,6 +26,7 @@ def test_main_only_sleeps_for_a_failed_cycle(retry, monkeypatch):
     sleep = AsyncMock()
     monkeypatch.setattr("sys.argv", ["main.py", "--goal", "find the chair"])
     monkeypatch.setattr(main, "RoboMasterController", lambda: controller)
+    monkeypatch.setattr(main, "MapServer", MagicMock())
     monkeypatch.setattr(main, "run_episode", episode)
     monkeypatch.setattr(main.asyncio, "sleep", sleep)
     monkeypatch.setattr(main, "brain", SimpleNamespace(aclose=AsyncMock()))

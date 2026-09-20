@@ -17,7 +17,7 @@ interface NavigationProps {
 export function Navigation({ active, onChange }: NavigationProps) {
   return (
     <nav className="border-b border-line bg-base">
-      <div className="mx-auto flex max-w-[1600px] gap-1 px-6 lg:px-10">
+      <div className="mx-auto flex max-w-[1600px] gap-1 overflow-x-auto px-6 lg:px-10">
         {tabs.map(({ id, label, icon: Icon }) => {
           const isActive = id === active
           return (

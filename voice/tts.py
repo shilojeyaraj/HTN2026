@@ -10,9 +10,9 @@ import threading
 from elevenlabs.client import ElevenLabs
 from elevenlabs.play import play  # shells out to mpv/ffplay; `sudo apt install mpv` on the Pi
 
-_client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
+_client = None
 
-VOICE_ID = os.environ["VOICE_ID"]
+VOICE_ID = os.getenv("VOICE_ID")
 MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
 
 
@@ -22,4 +22,9 @@ def _play(text: str) -> None:
 
 
 def speak(text: str) -> None:
+    global _client
+    if not VOICE_ID:
+        raise ValueError("VOICE_ID is required for speech playback")
+    if _client is None:
+        _client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
     threading.Thread(target=_play, args=(text,), daemon=True).start()

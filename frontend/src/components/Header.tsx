@@ -7,7 +7,7 @@ interface HeaderProps {
 
 export function Header({ rover }: HeaderProps) {
   const batteryColor =
-    rover.battery <= 20 ? 'text-alert' : rover.battery <= 40 ? 'text-warn' : 'text-ink'
+    rover.battery === null ? 'text-ink-faint' : rover.battery <= 20 ? 'text-alert' : rover.battery <= 40 ? 'text-warn' : 'text-ink'
 
   return (
     <header className="border-b border-line bg-surface">
@@ -19,7 +19,7 @@ export function Header({ rover }: HeaderProps) {
           </span>
         </div>
 
-        <div className="flex items-center gap-5 text-xs font-medium tracking-[0.12em] uppercase">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-xs font-medium tracking-[0.12em] uppercase">
           <span className="flex items-center gap-2">
             <span
               className={`h-2 w-2 rounded-full ${
@@ -33,13 +33,13 @@ export function Header({ rover }: HeaderProps) {
 
           <span className="hidden h-4 w-px bg-line-strong sm:block" />
 
-          <span className="font-mono text-ink-muted">{rover.id}</span>
+          <span className="whitespace-nowrap font-mono text-ink-muted">{rover.id}</span>
 
           <span className="hidden h-4 w-px bg-line-strong sm:block" />
 
           <span className={`flex items-center gap-2 ${batteryColor}`}>
             <BatteryMedium className="h-4 w-4" strokeWidth={2} />
-            <span className="font-mono">{rover.battery}%</span>
+            <span className="font-mono">{rover.battery === null ? 'Battery unavailable' : `${rover.battery}%`}</span>
           </span>
         </div>
       </div>

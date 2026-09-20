@@ -8,7 +8,7 @@ interface PatternInsightsCardProps {
 
 export function PatternInsightsCard({ insights }: PatternInsightsCardProps) {
   const entries = insights
-    ? Object.entries(insights).filter(([_, v]) => v != null && typeof v !== 'object')
+    ? Object.entries(insights).filter(([, v]) => v != null && typeof v !== 'object')
     : []
 
   return (

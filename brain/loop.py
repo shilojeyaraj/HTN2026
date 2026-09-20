@@ -115,6 +115,7 @@ def _retry_cycle(state: RobotState, error, retry_after=None) -> None:
     delay = (retry_delay(error, state.consecutive_failures - 1, retry_after) if is_rate_limited(error)
              else min(0.5 * 2 ** (state.consecutive_failures - 1), 8.0))
     state.retry_at = time.monotonic() + delay
+    state.telemetry.update(phase="retrying", reason=str(error))
     logger.warning("CLOSED_LOOP retry=%d delay_s=%.2f; no action: %s", state.consecutive_failures, delay, error)
 
 
@@ -139,6 +140,17 @@ def _mission_context(state: RobotState) -> dict:
 
 
 def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterController, *, direct: bool = False) -> dict:
+    action_id = state.telemetry.start_action(name, args, direct)
+    started = time.perf_counter()
+    result = {"status": "error", "detail": "execution interrupted"}
+    try:
+        result = _apply_verb(name, args, state, controller, action_id=action_id, direct=direct)
+        return result
+    finally:
+        state.telemetry.finish_action(action_id, result, (time.perf_counter() - started) * 1000)
+
+
+def _apply_verb(name: str, args, state: RobotState, controller: RoboMasterController, *, action_id: int, direct: bool = False) -> dict:
     """Execute a planner tool without exposing the RoboMaster SDK to the planner."""
     logger.info("Executing tool=%s args=%r", name, args)
     try:
@@ -151,6 +163,7 @@ def _execute_verb(name: str, args, state: RobotState, controller: RoboMasterCont
         logger.error("Rejected tool=%s args=%r: %s", name, args, exc)
         return {"status": "rejected", "detail": str(exc)}
 
+    state.telemetry.apply_action(action_id, params)
     # An attempted motion can change the view even if the hardware reports an error.
     if name in PHYSICAL_ACTIONS:
         logger.info("Motion tool=%s requested=%r clamped=%r", name, args, params)
@@ -308,8 +321,20 @@ def _execute_direct(command: dict, state: RobotState, controller: RoboMasterCont
 
 
 async def run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
+    state.telemetry.update(goal=state.current_goal, model=ACTION_MODEL)
+    if state.last_user_command:
+        state.telemetry.update(last_command=state.last_user_command)
     try:
-        return await _run_episode(state, controller)
+        await _run_episode(state, controller)
+        if state.finished_goal is not None and state.finished_goal == state.current_goal:
+            result = (state.last_action_result or {}).get("result", {})
+            failed = (state.telemetry.snapshot()["mode"] == "DIRECT"
+                      and result.get("status") in {"error", "rejected"})
+            state.telemetry.update(phase="failed" if failed else "complete",
+                                   reason="Command failed" if failed else "Goal complete")
+        elif state.telemetry.snapshot()["phase"] in {"executing", "thinking"}:
+            state.telemetry.update(phase="waiting_camera", reason="Waiting for the next observation")
+        return state
     except BaseException as exc:
         if state.startup_scan_status == "scanning":
             # Cancellation or exhausted perception may interrupt a physical turn.
@@ -319,7 +344,13 @@ async def run_episode(state: RobotState, controller: RoboMasterController) -> Ro
             state.relative_heading_deg = None
             _execute_verb("stop", {}, state, controller, direct=True)
             logger.error("Startup scan aborted: %s", exc or "interrupted")
+        state.telemetry.update(phase="failed", reason=str(exc) or "Mission interrupted")
         raise
+    finally:
+        state.telemetry.update(scene=state.scene_description, findings=list(state.findings),
+                               search_active=state.search_active, search_rotation_deg=state.search_rotation_deg,
+                               retry_in_s=max(0.0, state.retry_at - time.monotonic()),
+                               failures=state.consecutive_failures, cycles=state.successful_cycles)
 
 
 async def _run_episode(state: RobotState, controller: RoboMasterController) -> RobotState:
@@ -331,6 +362,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
     user_command = state.last_user_command
     command = parse_direct_command(user_command or state.current_goal)
     if command is not None:
+        state.telemetry.update(mode="DIRECT")
         logger.info("execution mode=DIRECT")
         # A direct goal is one-shot, including failures; never replay a partial
         # maneuver on the next episode. A direct stop also ends an active mission.
@@ -346,6 +378,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
         return state
 
     logger.info("execution mode=CLOSED_LOOP")
+    state.telemetry.update(mode="CLOSED_LOOP")
     state.scene_fresh = False
     if state.retry_at > time.monotonic():
         return state
@@ -368,6 +401,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
         if (frame_jpeg is None or not isinstance(frame_at, (int, float))
                 or not math.isfinite(frame_at) or frame_at <= state.last_frame_at):
             state.retry_at = time.monotonic() + 0.1
+            state.telemetry.update(phase="waiting_camera", reason="Waiting for a fresh camera frame")
             logger.info("CLOSED_LOOP waiting for a new valid frame; no action")
             return state
         state.last_frame_at = frame_at  # Never decide twice from the same buffered frame.
@@ -378,10 +412,13 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
             brain.enqueue_memory("mission_context", json.dumps(context, default=str))
             state.memory_goal = state.current_goal
         started = time.monotonic()
+        state.telemetry.update(phase="thinking", reason="Interpreting the camera frame")
         try:
             raw = await decide_action(frame_jpeg, context)
         finally:
-            logger.info("CLOSED_LOOP model=%s inference_latency_s=%.3f", ACTION_MODEL, time.monotonic() - started)
+            elapsed = time.monotonic() - started
+            state.telemetry.update(inference_ms=elapsed * 1000)
+            logger.info("CLOSED_LOOP model=%s inference_latency_s=%.3f", ACTION_MODEL, elapsed)
         try:
             decision = validate_decision(raw)
             if scanning and "world_observation" not in decision:
@@ -424,6 +461,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
             # decision. No extra inference, scan turn, or camera change first.
         else:
             state.scene_description = decision["observation"]
+            state.telemetry.update(scene=state.scene_description, scene_at=observed_at)
             state.recent_observations.append(state.scene_description)
             del state.recent_observations[:-8]
             _advance_startup_scan(state, controller)
@@ -442,6 +480,7 @@ async def _run_episode(state: RobotState, controller: RoboMasterController) -> R
                                        "target_visible": decision["target_visible"]})
     del state.inspected_viewpoints[:-MAX_INSPECTED_VIEWPOINTS]
     state.scene_description = decision["observation"]
+    state.telemetry.update(scene=state.scene_description, scene_at=time.time())
     state.recent_observations.append(decision["observation"])
     del state.recent_observations[:-8]
     state.last_user_command = None

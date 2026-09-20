@@ -207,6 +207,7 @@ def test_main_exits_after_one_direct_goal_before_vision_cooldown(local_only, mon
 
     monkeypatch.setattr("sys.argv", ["main.py", "--goal", "turn 360"])
     monkeypatch.setattr(main, "RoboMasterController", lambda: local_only)
+    monkeypatch.setattr(main, "MapServer", MagicMock())
     monkeypatch.setattr(main, "brain", SimpleNamespace(aclose=AsyncMock()))
     cooldown = Mock(side_effect=AssertionError("direct goal should already be finished"))
     monkeypatch.setattr(main.asyncio, "sleep", cooldown)

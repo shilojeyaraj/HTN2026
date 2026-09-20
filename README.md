@@ -1,6 +1,6 @@
 # HTN 2026 rover
 
-The rover uses a DJI RoboMaster EP Core controlled from a Linux laptop over the robot's AP Wi-Fi. All robot I/O is isolated in `control/robomaster.py`; planners and tool handlers never import the DJI SDK.
+The rover uses a DJI RoboMaster EP Core controlled from a Linux laptop over STA Wi-Fi. All robot I/O is isolated in `control/robomaster.py`; planners and tool handlers never import the DJI SDK.
 
 ## Setup
 
@@ -10,9 +10,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Connect the laptop to the RoboMaster's Wi-Fi network before running anything that initializes the robot. The controller always connects with `ep.initialize(conn_type="ap")`.
+Connect the laptop and RoboMaster to the same network before running anything that initializes the robot. The controller connects with `ep.initialize(conn_type="sta")`.
 
-Run `python main.py` to perform the startup scan, then monitor without a movement goal. Startup moves the camera arm and rotates the chassis in 60° steps. Set `STARTUP_SCAN_ENABLED = False` in `brain/config.py` for monitoring without that motion.
+Run `python main.py` to perform the startup scan, then monitor without a movement goal. Startup moves the camera arm and rotates the chassis in 60° steps. Set `STARTUP_SCAN_ENABLED = False` in `brain/config.py` for monitoring without that motion. Run `cd frontend && npm run dev` in another terminal (run `npm ci` there first if needed). The runtime publishes battery, chassis readings, freshness, camera health, and mission/action events on port 8766. See [dashboard setup and data coverage](frontend/README.md) for configuration and limitations.
 
 ## Physical smoke test
 

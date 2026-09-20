@@ -25,6 +25,9 @@ CAMERA_MAX_FRAME_AGE_S = 1.0
 CAMERA_RESTART_AFTER_S = 2.0
 CAMERA_RESTART_DELAY_S = 0.5
 CAMERA_SHUTDOWN_TIMEOUT_S = 5.0
+TELEMETRY_MAX_AGE_S = 2.0
+STATUS_NAMES = ("static", "uphill", "downhill", "on_slope", "picked_up", "slipping",
+                "impact_x", "impact_y", "impact_z", "rollover", "hill_static")
 
 
 class RoboMasterError(RuntimeError):
@@ -62,6 +65,13 @@ class RoboMasterController:
         self._velocity_mps = None
         self._status = None
         self._tof_mm = None
+        self._battery_percent = None
+        self._received_at = {}
+        self._received_wall = {}
+        self._subscriptions = {}
+        self._trail = deque(maxlen=500)
+        self._alerts = deque(maxlen=30)
+        self._stop_result = None
 
     @property
     def chassis(self):
@@ -107,6 +117,14 @@ class RoboMasterController:
                 self._sensor = getattr(ep, "sensor", None)
                 self._robotic_arm = getattr(ep, "robotic_arm", None)
                 self._gripper = getattr(ep, "gripper", None)
+                self._received_at.clear()
+                self._received_wall.clear()
+                self._subscriptions.clear()
+                self._trail.clear()
+                self._alerts.clear()
+                self._stop_result = None
+                for key in ("position_m", "attitude_deg", "velocity_mps", "status", "tof_mm", "battery_percent"):
+                    setattr(self, "_" + key, None)
                 self._subscribe_telemetry()
                 logger.info("connected to RoboMaster EP Core in STA mode; robot_type=%s chassis_type=%s",
                             type(ep), type(self._chassis))
@@ -124,40 +142,93 @@ class RoboMasterController:
 
     def _subscribe_telemetry(self) -> None:
         subscriptions = (
-            (self._chassis, "sub_position", self._on_position),
-            (self._chassis, "sub_attitude", self._on_attitude),
-            (self._chassis, "sub_velocity", self._on_velocity),
-            (self._chassis, "sub_status", self._on_status),
-            (self._sensor, "sub_distance", self._on_tof),
+            ("position_m", self._chassis, "sub_position", self._on_position),
+            ("attitude_deg", self._chassis, "sub_attitude", self._on_attitude),
+            ("velocity_mps", self._chassis, "sub_velocity", self._on_velocity),
+            ("status", self._chassis, "sub_status", self._on_status),
+            ("tof_mm", self._sensor, "sub_distance", self._on_tof),
+            ("battery_percent", getattr(self._ep, "battery", None), "sub_battery_info", self._on_battery),
         )
-        for source, name, callback in subscriptions:
+        for key, source, name, callback in subscriptions:
             subscribe = getattr(source, name, None)
             if subscribe is None:
+                self._subscriptions[key] = "unsupported"
                 continue
             try:
-                subscribe(freq=5, callback=callback)
+                self._subscriptions[key] = "active" if subscribe(freq=5, callback=callback) is not False else "failed"
             except Exception:
+                self._subscriptions[key] = "failed"
                 logger.warning("RoboMaster telemetry subscription %s failed", name, exc_info=True)
+
+    def _record_reading(self, key: str, values: tuple, count: int | None = None) -> bool:
+        valid = (bool(values) and (count is None or len(values) == count)
+                 and all(isinstance(v, (int, float)) and math.isfinite(v) for v in values))
+        if key == "battery_percent":
+            valid = valid and 0 <= values[0] <= 100
+        if not valid:
+            setattr(self, "_" + key, None)
+            self._received_at.pop(key, None)
+            self._received_wall.pop(key, None)
+            return False
+        setattr(self, "_" + key, values[0] if key == "battery_percent" else values)
+        self._received_at[key] = time.monotonic()
+        self._received_wall[key] = time.time()
+        return True
 
     def _on_position(self, *position) -> None:
         with self._lock:
-            self._position_m = _telemetry_tuple(*position)
+            if self._record_reading("position_m", _telemetry_tuple(*position), 3):
+                point = list(self._position_m[:2])
+                if not self._trail or point != self._trail[-1]:
+                    self._trail.append(point)
 
     def _on_attitude(self, *attitude) -> None:
         with self._lock:
-            self._attitude_deg = _telemetry_tuple(*attitude)
+            self._record_reading("attitude_deg", _telemetry_tuple(*attitude), 3)
 
     def _on_velocity(self, *velocity) -> None:
         with self._lock:
-            self._velocity_mps = _telemetry_tuple(*velocity)
+            self._record_reading("velocity_mps", _telemetry_tuple(*velocity), 6)
 
     def _on_status(self, *status) -> None:
         with self._lock:
-            self._status = _telemetry_tuple(*status)
+            previous = self._status or (0,) * len(STATUS_NAMES)
+            if self._record_reading("status", _telemetry_tuple(*status), len(STATUS_NAMES)):
+                for index in (4, 5, 6, 7, 8, 9):
+                    if self._status[index] and not previous[index]:
+                        self._alerts.append({"name": STATUS_NAMES[index], "timestamp": time.time()})
 
     def _on_tof(self, *distances) -> None:
         with self._lock:
-            self._tof_mm = _telemetry_tuple(*distances)
+            self._record_reading("tof_mm", _telemetry_tuple(*distances))
+
+    def _on_battery(self, *percent) -> None:
+        with self._lock:
+            self._record_reading("battery_percent", _telemetry_tuple(*percent), 1)
+
+    def get_telemetry(self) -> dict:
+        """Cached readings only: safe to publish while a blocking SDK action runs."""
+        now = time.monotonic()
+        with self._lock:
+            sources = {}
+            for key in ("position_m", "attitude_deg", "velocity_mps", "status", "tof_mm", "battery_percent"):
+                age = max(0.0, now - self._received_at[key]) if key in self._received_at else None
+                status = ("unavailable" if age is None else
+                          "live" if self._ep is not None and age <= TELEMETRY_MAX_AGE_S else "stale")
+                sources[key] = {"value": getattr(self, "_" + key), "age_s": age, "status": status,
+                                "received_at": self._received_wall.get(key),
+                                "subscription": self._subscriptions.get(key, "pending")}
+            flags = dict(zip(STATUS_NAMES, map(bool, self._status))) if self._status is not None else None
+            stop = dict(self._stop_result) if self._stop_result else None
+            if stop is not None:
+                # Only a post-request, fresh status sample can describe the stop outcome.
+                observed = (sources["status"]["status"] == "live"
+                            and self._received_at["status"] > stop["requested_monotonic_s"])
+                stop["motion"] = ("stationary" if flags["static"] else "moving") if observed else "unknown"
+            connected = self._ep is not None and any(s["status"] == "live" for s in sources.values())
+            return {"connected": connected, "sources": sources, "flags": flags,
+                    "trail": list(self._trail), "alerts": list(self._alerts), "stop": stop,
+                    "camera": self.get_camera_state()}
 
     def get_chassis_state(self) -> dict:
         """Return only telemetry actually received from the RoboMaster."""
@@ -255,14 +326,25 @@ class RoboMasterController:
                 f"failure_reason={getattr(action, 'failure_reason', None)!r}"
             )
 
-    def stop(self) -> dict:
+    def _send_stop(self, chassis) -> dict:
+        with self._lock:
+            self._stop_result = {"status": "requested", "requested_at": time.time(),
+                                 "requested_monotonic_s": time.monotonic(), "detail": None}
         try:
             logger.info("chassis stop requested")
-            self.chassis.drive_speed(x=0, y=0, z=0)
+            if chassis.drive_speed(x=0, y=0, z=0) is False:
+                raise RoboMasterError("RoboMaster rejected the stop command")
+            with self._lock:
+                self._stop_result = {**self._stop_result, "status": "accepted"}
             return {"status": "completed"}
         except Exception as exc:
+            with self._lock:
+                self._stop_result = {**self._stop_result, "status": "failed", "detail": str(exc)}
             logger.exception("RoboMaster stop command failed")
             raise RoboMasterError(f"RoboMaster stop failed: {exc}") from exc
+
+    def stop(self) -> dict:
+        return self._send_stop(self._chassis)
 
     def move_arm(self, x_mm: float = 0, y_mm: float = 0) -> dict:
         """Move the arm relative to its current position: forward/up are positive."""
@@ -429,7 +511,7 @@ class RoboMasterController:
 
     def _stop_safely(self, chassis=None) -> None:
         try:
-            (chassis or self._chassis).drive_speed(x=0, y=0, z=0)
+            self._send_stop(chassis or self._chassis)
         except Exception:
             logger.debug("best-effort RoboMaster stop failed", exc_info=True)
 
@@ -472,6 +554,7 @@ class RoboMasterController:
             (chassis, "unsub_position"), (chassis, "unsub_attitude"),
             (chassis, "unsub_velocity"), (chassis, "unsub_status"),
             (sensor, "unsub_distance"),
+            (getattr(ep, "battery", None), "unsub_battery_info"),
         ):
             unsubscribe = getattr(source, name, None)
             if unsubscribe is not None:

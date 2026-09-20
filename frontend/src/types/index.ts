@@ -25,11 +25,72 @@ export interface ActiveEncounter extends Encounter {
 export interface Rover {
   id: string
   connected: boolean
-  battery: number
+  battery: number | null
   cameraName: string
 }
 
 export type Tab = 'dashboard' | 'telemetry' | 'brain' | 'encounters'
+
+export interface LiveReading {
+  value: number | number[] | null
+  age_s: number | null
+  received_at: number | null
+  status: 'live' | 'stale' | 'unavailable'
+  subscription: 'pending' | 'active' | 'failed' | 'unsupported'
+}
+
+export interface LiveAction {
+  id: number
+  name: string
+  requested_args: string
+  applied_args: Record<string, unknown> | null
+  mode: string
+  status: string
+  started_at: number
+  finished_at: number | null
+  duration_ms: number | null
+  result: Record<string, unknown> | null
+}
+
+export interface LiveMission {
+  phase: string
+  reason: string | null
+  mode: string | null
+  goal: string | null
+  model: string | null
+  scene: string | null
+  scene_at: number | null
+  findings: { type: string; description: string }[]
+  search_active: boolean
+  search_rotation_deg: number
+  retry_in_s: number
+  failures: number
+  cycles: number
+  inference_ms: number | null
+  last_command: string | null
+  actions: LiveAction[]
+}
+
+export interface LiveSnapshot {
+  schema: 'rover.v1'
+  timestamp: number
+  rover: {
+    connected: boolean
+    sources: Record<'position_m' | 'attitude_deg' | 'velocity_mps' | 'status' | 'tof_mm' | 'battery_percent', LiveReading>
+    flags: Record<string, boolean> | null
+    trail: number[][]
+    alerts: { name: string; timestamp: number }[]
+    stop: { status: string; requested_at: number; motion: string; detail: string | null } | null
+    camera: {
+      frame_age_s: number | null
+      decode_fps: number
+      decode_failures: number
+      stream_restarts: number
+      reader_alive: boolean
+    }
+  }
+  mission: LiveMission
+}
 
 /* --------------------------------------------------------------------------
  * Telemetry

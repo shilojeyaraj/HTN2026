@@ -193,6 +193,7 @@ def test_mission_shutdown_stops_robot_and_closes_clients_on_exhaustion(monkeypat
     close_vision = AsyncMock()
     monkeypatch.setattr("sys.argv", ["main.py", "--goal", "Test"])
     monkeypatch.setattr(main, "RoboMasterController", lambda: controller)
+    monkeypatch.setattr(main, "MapServer", MagicMock())
     monkeypatch.setattr(main, "brain", planner)
     monkeypatch.setattr(main, "run_episode", episode)
     monkeypatch.setattr(main, "aclose_vision_client", close_vision)

@@ -1,9 +1,11 @@
 from dataclasses import dataclass, field
+from control.telemetry import MissionTelemetry
 from brain.world_state import WorldState
 
 
 @dataclass
 class RobotState:
+    telemetry: MissionTelemetry = field(default_factory=MissionTelemetry, repr=False)
     world_state: WorldState = field(default_factory=WorldState)
     startup_scan_status: str = "pending"
     startup_scan_rotation_deg: float = 0.0
