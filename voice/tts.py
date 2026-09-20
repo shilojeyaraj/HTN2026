@@ -13,13 +13,19 @@ from elevenlabs.play import play  # shells out to mpv/ffplay; `sudo apt install 
 _client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
 
 VOICE_ID = os.environ["VOICE_ID"]
+VICTIM_VOICE_ID = os.environ.get("VICTIM_VOICE_ID", VOICE_ID)
 MODEL_ID = "eleven_flash_v2_5"  # ~75ms latency, matters for a live demo narrating decisions
 
 
-def _play(text: str) -> None:
-    audio = _client.text_to_speech.convert(text=text, voice_id=VOICE_ID, model_id=MODEL_ID)
+def _play(text: str, voice_id: str = VOICE_ID) -> None:
+    audio = _client.text_to_speech.convert(text=text, voice_id=voice_id, model_id=MODEL_ID)
     play(audio)
 
 
 def speak(text: str) -> None:
     threading.Thread(target=_play, args=(text,), daemon=True).start()
+
+
+def speak_as_victim(text: str) -> None:
+    """Speak as the victim using a different voice."""
+    threading.Thread(target=_play, args=(text, VICTIM_VOICE_ID), daemon=True).start()

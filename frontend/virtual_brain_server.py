@@ -302,7 +302,7 @@ def execute_tool(name, args):
 
     if name == "speak":
         text = args.get("text", "")
-        logger.info("[TTS] %s", text)
+        logger.info("[TTS] Rover: %s", text)
         transcript_messages.append({
             "id": f"msg-{len(transcript_messages)}",
             "speaker": "rover",
@@ -316,6 +316,42 @@ def execute_tool(name, args):
             speak(text)
         except Exception:
             pass
+
+        # Simulate victim response after a short delay
+        victim_responses = [
+            "Help me! I'm trapped under the rubble!",
+            "I can hear you! Please come closer!",
+            "I'm injured but I can move. Where are you?",
+            "Thank god someone is here. I'm over here!",
+            "I've been here for hours. Can you find me?",
+            "My leg is stuck. I can't move it.",
+        ]
+        import random
+        victim_text = random.choice(victim_responses)
+
+        def victim_responds():
+            time.sleep(3.0)
+            logger.info("[TTS] Victim: %s", victim_text)
+            transcript_messages.append({
+                "id": f"msg-{len(transcript_messages)}",
+                "speaker": "person",
+                "text": victim_text,
+                "timestamp": time.strftime("%H:%M:%S"),
+            })
+            if len(transcript_messages) > 20:
+                transcript_messages[:] = transcript_messages[-20:]
+            try:
+                from voice.tts import speak_as_victim
+                speak_as_victim(victim_text)
+            except Exception:
+                pass
+            # Feed victim response back to brain as a new user command
+            global last_brain_ts, last_pose
+            last_brain_ts = 0.0  # trigger immediate brain call
+            logger.info("Victim responded — triggering brain to react")
+
+        threading.Thread(target=victim_responds, daemon=True).start()
+
         result = {"status": "completed"}
         brain_activity.log_call(name, args, result)
         db.log_brain_call(name, args, result, pose)
