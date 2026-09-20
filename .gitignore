@@ -40,3 +40,7 @@ ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
 Exports/
+Textures/
+Preview_*.jpg
+License_Standard.txt
+*.HDR

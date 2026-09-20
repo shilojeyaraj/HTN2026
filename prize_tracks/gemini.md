@@ -5,6 +5,10 @@
 **Gemini Project Number:** 305405938625
 **Project name:** projects/305405938625
 
+## Virtual Demo Mode
+
+In virtual mode, the planner model is `gemini-3-flash-preview` (gemini-2.5-pro is deprecated; gemini-3.5-flash hits free-tier quota). The brain runs through `frontend/virtual_brain_server.py` and uses Gemini for both planning and scene understanding in the browser-based 3D simulation.
+
 ---
 
 ## How the rover uses Gemini

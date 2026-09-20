@@ -1,5 +1,23 @@
 # Multi-Agent System Architecture
 
+## Virtual Demo Mode
+
+When hardware is unavailable, the system runs as a **browser-based 3D virtual rescue simulation**. The real Backboard brain (gemini-3-flash-preview) drives a simulated rover through a 3D disaster environment via `frontend/virtual_brain_server.py`. The brain calls real tools, retrieves RAG protocols, speaks via ElevenLabs TTS, logs to MongoDB, and builds a progressive LiDAR occupancy map — all in the browser, no hardware needed.
+
+**Virtual mode components:**
+- `frontend/virtual_brain_server.py` — real Backboard brain + SimRover + WebSocket streaming (port 8766)
+- `frontend/src/components/DrivingView3D.tsx` — 3D driving view with rover, people, buildings, terrain
+- `frontend/src/components/MappingView3D.tsx` — 3D occupancy map with progressive LiDAR + detection captions
+- `frontend/src/components/AINarrative.tsx` — AI mission summary with alerts and pattern analysis
+- `frontend/src/components/RatingPanel.tsx` — TTS thumbs up/down evaluation for human feedback
+- `training/scenario_generator.py` — disaster scenario generator with messy sensor data
+- `training/collect_traces.py` — brain trace collector + evaluator
+- `training/train_rescue.py` — SFT dataset converter for Baseten fine-tuning
+
+**Note:** The planner model is `gemini-3-flash-preview` (not gemini-2.5-pro, which is deprecated; not gemini-3.5-flash, which hits free-tier quota limits).
+
+---
+
 ## System Overview
 
 The rover is a heterogeneous multi-agent system for autonomous rescue operations. Nine agents — 1 Leader + 8 Teammates — with distinct roles, models, and execution environments coordinate through shared state, a transcript buffer, a priority arbiter, a live occupancy map, and a Backboard RAG/memory layer. The system runs across three machines: a Raspberry Pi 5 (rover), a laptop (perception + STT), and the cloud (Backboard, Baseten, ElevenLabs).

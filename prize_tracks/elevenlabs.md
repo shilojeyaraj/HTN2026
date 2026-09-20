@@ -3,6 +3,10 @@
 **Prize:** wireless earbuds. 1 winner.
 **Scope:** natural, human-sounding, emotionally expressive voice.
 
+## Virtual Demo Mode — TTS Rating Panel
+
+In virtual mode, the `RatingPanel.tsx` component lets judges rate the rover's speech quality with thumbs up/down. Ratings are sent via WebSocket to the virtual brain server and stored in MongoDB (`tts_ratings` collection). These ratings feed into the training pipeline as human feedback to weight the training data for retraining.
+
 ---
 
 ## How the rover uses ElevenLabs

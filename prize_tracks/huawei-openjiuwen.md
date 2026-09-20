@@ -3,6 +3,10 @@
 **Prize (per member):** 1st Huawei Watch GT 6 + internship opportunity at Huawei Toronto Research Center (subject to interview); 2nd FreeClip 2 Earbuds + office tour. Up to $40 team API credits. 2 winners.
 **Scope:** a functional multi-agent app solving a real problem through genuine collaboration (task decomposition, communication, tool use, coordination), not chained prompts. Building on JiuwenSwarm/WorkSwarm is encouraged, not required.
 
+## Virtual Demo Mode
+
+In virtual mode, all 9 agents run identically — the real Backboard brain (gemini-3-flash-preview) coordinates 8 teammates through 16 tools in a browser-based 3D simulation. The multi-agent architecture is fully demonstrable without hardware.
+
 > **Status:** stacks cleanly on top of the base build. No extra code required to qualify — the architecture already is a heterogeneous multi-agent system. This is the highest-value Huawei prize and it fits the existing design.
 
 ---

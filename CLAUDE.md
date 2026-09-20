@@ -16,6 +16,13 @@ commands are documented in README.md. Motor control via RoboMaster SDK
 (control/motors.py — teammate implementing). Preserve the onboard watchdog
 and independent safety requirements before adding motion.
 
+**Virtual Demo Mode (fallback):** When hardware is unavailable, run
+`python frontend/virtual_brain_server.py` — the real Backboard brain
+(gemini-3-flash-preview) drives a simulated rover through a 3D disaster
+environment in the browser. All 16 tools, RAG, memory, MongoDB tracking,
+ElevenLabs TTS, and the training pipeline work identically in virtual mode.
+See `DEMO_SCRIPT.md` for the virtual demo flow.
+
 **Gemini Project Number:** 305405938625 (for Devpost submission)
 **Gemini API Key:** in `.env` as `GEMINI_API_KEY` — also connect as BYOK in Backboard dashboard
 

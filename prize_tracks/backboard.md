@@ -3,6 +3,10 @@
 **Prize:** guaranteed internship interviews, $400 per team, swag. 1 winner.
 **Scope:** build anything on Backboard — text, image, voice, 17,000+ models, memory, RAG, embeddings, tool calling, web search, one API. Judged on ambition; the more of the stack you use, the better the odds.
 
+## Virtual Demo Mode
+
+When hardware is unavailable, the system runs as a browser-based 3D virtual rescue simulation via `frontend/virtual_brain_server.py`. The real Backboard brain (gemini-3-flash-preview) drives a simulated rover through a 3D disaster environment, calling real tools, retrieving RAG protocols, and streaming everything to the frontend via WebSocket. All 16 tools, RAG, memory, and insights work identically in virtual mode.
+
 ---
 
 ## How the rover uses Backboard

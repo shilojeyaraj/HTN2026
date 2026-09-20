@@ -3,6 +3,16 @@
 **Prize (per member):** Grand: SF trip + final-round interviews + $200 credits + signed *Inference Engineering*. Runner-up: AirPods 4 + $100 credits + book. 2 winners.
 **Scope:** creative, meaningful use of Baseten (inference or training).
 
+## Virtual Demo Mode — Training Pipeline
+
+In virtual mode, the Baseten training pipeline is fully demonstrable:
+- `training/scenario_generator.py` — generates disaster scenarios with messy sensor data (noise, missing readings, conflicting data)
+- `training/collect_traces.py` — runs the real Backboard brain through scenarios, evaluates decisions against rescue protocols, collects good traces as JSONL
+- `training/train_rescue.py` — converts traces to SFT dataset for Baseten fine-tuning
+- `BASETEN_TRAINING.md` — step-by-step guide for training on Baseten H100
+
+The model learns from itself: it runs scenarios, its good decisions become training data, it gets fine-tuned, and the improved model makes better decisions next time. Human TTS ratings (thumbs up/down) add a feedback signal to the training weights.
+
 ---
 
 ## How the rover uses Baseten

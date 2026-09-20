@@ -3,6 +3,10 @@
 **Prize:** $10K first, $2K second. 2 winners. (Biggest cash on the board.)
 **Scope:** an LLM-driven agent operating on real-world messy data (unstructured, incomplete, conflicting, noisy) that takes meaningful actions. Rewards data cleaning/validation, multi-source resolution, error handling, decision-making under uncertainty. Judged on technical complexity, creativity, handling messiness, practical utility.
 
+## Virtual Demo Mode — Training on Messy Data
+
+In virtual mode, the `training/scenario_generator.py` generates disaster scenarios with deliberately messy sensor data: noise, missing readings, and conflicting data. The brain must make decisions under this uncertainty, and its decisions are evaluated against rescue protocols. This demonstrates the Rox track's core ask — an agent handling messiness at every layer — even without physical hardware.
+
 ---
 
 ## How the rover targets the Rox track
