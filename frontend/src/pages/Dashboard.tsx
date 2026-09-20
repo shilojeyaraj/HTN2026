@@ -1,12 +1,10 @@
 import { BrainActivity } from '../components/BrainActivity'
-import { CameraFeed } from '../components/CameraFeed'
-import { CurrentEncounter } from '../components/CurrentEncounter'
 import { MapView } from '../components/MapView'
 import { PatternInsightsCard } from '../components/PatternInsights'
 import { SensorGauges } from '../components/SensorGauges'
 import { Transcript } from '../components/Transcript'
 import { useMapStream } from '../hooks/useMapStream'
-import { activeEncounter, rover } from '../data/mockData'
+import { activeEncounter } from '../data/mockData'
 
 export function Dashboard() {
   const { payload } = useMapStream()
@@ -27,11 +25,6 @@ export function Dashboard() {
         <SensorGauges sensors={payload?.sensor_state ?? null} />
         <BrainActivity events={payload?.brain_activity ?? []} />
         <PatternInsightsCard insights={payload?.insights ?? null} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-        <CameraFeed rover={rover} />
-        <CurrentEncounter encounter={activeEncounter} className="self-start" />
       </div>
     </div>
   )
