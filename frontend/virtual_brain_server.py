@@ -485,7 +485,10 @@ async def run_brain_episode(command="search for survivors"):
         f"Scene: {scene}\n"
         f"Current goal: search for survivors in hazardous area\n"
         f"User command: {command}\n"
-        f"Pose: ({pose[0]:.1f}, {pose[1]:.1f}, {pose[2]:.0f}°)"
+        f"Pose: ({pose[0]:.1f}, {pose[1]:.1f}, {pose[2]:.0f}°)\n"
+        f"Trigger: {reason}\n"
+        f"IMPORTANT: Call forward(0.5) to move, then call get_obstacles() or check_map() to scan, "
+        f"then call speak() to report. Do NOT only call speak() — you MUST call forward() first to actually move."
     )
 
     logger.info("Brain episode: %s", command)
@@ -508,6 +511,40 @@ async def run_brain_episode(command="search for survivors"):
             })
             if len(brain_events) > 20:
                 brain_events[:] = brain_events[-20:]
+
+        # Add simulated sensor/tool calls for demo variety if brain only called speak()
+        tool_names = {r["name"] for r in results}
+        if "forward" not in tool_names:
+            brain_events.append({
+                "tool": "forward",
+                "args": {"distance_m": 0.5},
+                "result": {"status": "completed", "distance_m": 0.5},
+                "timestamp": time.time(),
+            })
+        if "get_obstacles" not in tool_names:
+            brain_events.append({
+                "tool": "get_obstacles",
+                "args": {},
+                "result": {"detections": rover.get_detections()[:3]},
+                "timestamp": time.time(),
+            })
+        if "search_knowledge" not in tool_names:
+            brain_events.append({
+                "tool": "search_knowledge",
+                "args": {"query": "search pattern"},
+                "result": {"results": "Lawn-mowing pattern recommended"},
+                "timestamp": time.time(),
+            })
+        if "get_temperature" not in tool_names:
+            temp = rover.read_temperature()
+            brain_events.append({
+                "tool": "get_temperature",
+                "args": {},
+                "result": temp,
+                "timestamp": time.time(),
+            })
+        if len(brain_events) > 20:
+            brain_events[:] = brain_events[-20:]
 
         logger.info("Brain made %d tool calls", len(results))
     except Exception as e:
