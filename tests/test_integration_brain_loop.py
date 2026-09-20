@@ -30,6 +30,14 @@ class FakeRoboMasterController:
     def stop(self):
         return {"status": "completed"}
 
+    def move_arm(self, _x_mm, _y_mm):
+        return {"status": "completed"}
+
+    def recenter_arm(self):
+        return {"status": "completed"}
+
+    open_gripper = close_gripper = recenter_arm
+
 
 def test_run_episode_with_fake_robomaster():
     from brain.loop import run_episode

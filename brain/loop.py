@@ -43,6 +43,10 @@ def _execute_verb(name: str, args: dict, state: RobotState, controller: RoboMast
         "strafe_right": lambda: controller.strafe_right(args["distance_m"]),
         "turn": lambda: controller.turn(args["degrees"]),
         "stop": controller.stop,
+        "move_arm": lambda: controller.move_arm(args.get("x_mm", 0), args.get("y_mm", 0)),
+        "recenter_arm": controller.recenter_arm,
+        "open_gripper": controller.open_gripper,
+        "close_gripper": controller.close_gripper,
     }.get(name)
     if movement is None:
         return {"status": "error", "detail": f"unknown verb {name}"}

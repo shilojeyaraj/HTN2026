@@ -6,7 +6,8 @@ from brain.tools import VERBS, SYSTEM_PROMPT
 class TestVerbSchema:
     def test_all_robot_verbs_present(self):
         names = {v["function"]["name"] for v in VERBS}
-        assert names == {"forward", "backward", "strafe_left", "strafe_right", "turn", "stop", "speak",
+        assert names == {"forward", "backward", "strafe_left", "strafe_right", "turn", "stop",
+                         "move_arm", "recenter_arm", "open_gripper", "close_gripper", "speak",
                          "get_obstacles", "get_state"}
 
     def test_each_verb_has_type_function(self):

@@ -36,6 +36,28 @@ VERBS = [
     {
         "type": "function",
         "function": {
+            "name": "move_arm",
+            "description": "Move the camera arm relative to its current position in millimetres: x_mm forward/back, y_mm up/down. Keep each value within 80 mm.",
+            "parameters": {"type": "object", "properties": {
+                "x_mm": {"type": "number"}, "y_mm": {"type": "number"},
+            }, "required": ["x_mm", "y_mm"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {"name": "recenter_arm", "description": "Return the camera arm to centre.", "parameters": {"type": "object", "properties": {}}},
+    },
+    {
+        "type": "function",
+        "function": {"name": "open_gripper", "description": "Open the claw at safe low power, then pause it.", "parameters": {"type": "object", "properties": {}}},
+    },
+    {
+        "type": "function",
+        "function": {"name": "close_gripper", "description": "Close the claw at safe low power, then pause it.", "parameters": {"type": "object", "properties": {}}},
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "speak",
             "description": "Say something out loud via TTS.",
             "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
@@ -67,6 +89,10 @@ Move by calling forward/backward/strafe_left/strafe_right/turn in small bounded 
 Use get_state for real chassis telemetry. get_obstacles returns raw ToF readings only; do \
 not invent their direction or treat an absent reading as clear space. Never invent motor \
 commands outside the provided tools.
+
+The camera arm moves forward/back and up/down; use turn to look left or right. Use \
+move_arm only for a better view, then recenter_arm when finished. Use the gripper only \
+when the mission requires handling an object.
 
 Use speak() the way a real rescue responder would: calm, clear, reassuring, brief. \
 Narrate what matters as you find it -- a hazard, an obstacle, a person -- don't stay \
