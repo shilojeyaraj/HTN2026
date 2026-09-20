@@ -33,7 +33,6 @@ class BackboardBrain:
         self.model_name = model_name
         self.thread_id = None
         self.assistant_id = None
-        self._knowledge_uploaded = False
 
     def _get_client(self) -> BackboardClient:
         if self.client is None:
@@ -141,21 +140,11 @@ class BackboardBrain:
         return await self._run_tools(content, system_prompt, tools, execute_tool, memory)
 
     async def _ensure_initialized(self) -> None:
-        """Create static assistant data without waiting for document indexing."""
+        """Create the assistant without uploading or indexing documents."""
         client = self._get_client()
         if self.assistant_id is None:
             assistant = await client.create_assistant(name="rescue-rover-brain")
             self.assistant_id = assistant.assistant_id
-        if not self._knowledge_uploaded:
-            kb_dir = os.path.join(os.path.dirname(__file__), "..", "knowledge")
-            for doc in ["rescue_protocols.md"]:
-                path = os.path.join(kb_dir, doc)
-                if os.path.exists(path):
-                    try:
-                        await client.upload_document_to_assistant(self.assistant_id, path)
-                    except Exception:
-                        pass
-            self._knowledge_uploaded = True
 
     async def _search_memory(self, query: str) -> dict:
         await self._ensure_initialized()

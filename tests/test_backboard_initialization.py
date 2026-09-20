@@ -1,4 +1,4 @@
-"""Static Backboard documents must never hold up planner requests for indexing."""
+"""Backboard planner setup never uploads documents."""
 
 import asyncio
 import logging
@@ -23,15 +23,14 @@ class FakeClient:
         self.memories.append((assistant_id, content, metadata))
 
 
-def test_static_documents_do_not_wait_for_indexing():
+def test_planner_setup_does_not_upload_documents():
     brain = object.__new__(BackboardBrain)
     brain.client = FakeClient()
     brain.assistant_id = None
-    brain._knowledge_uploaded = False
 
     asyncio.run(brain._ensure_initialized())
 
-    assert len(brain.client.uploaded) == 1
+    assert brain.client.uploaded == []
     assert brain.client.memories == []
 
 

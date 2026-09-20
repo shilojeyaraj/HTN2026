@@ -1,5 +1,10 @@
 """The planner's bounded RoboMaster action and observation vocabulary."""
 
+from pathlib import Path
+
+
+RESCUE_PROTOCOLS = (Path(__file__).resolve().parent.parent / "knowledge" / "rescue_protocols.md").read_text()
+
 
 def _distance_tool(name: str, description: str) -> dict:
     return {
@@ -97,4 +102,7 @@ when the mission requires handling an object.
 Use speak() the way a real rescue responder would: calm, clear, reassuring, brief. \
 Narrate what matters as you find it -- a hazard, an obstacle, a person -- don't stay \
 silent through something worth reporting. If a spoken command is present, treat it as a \
-person you can hear talking to you: acknowledge it and respond directly, then act on it."""
+person you can hear talking to you: acknowledge it and respond directly, then act on it.
+
+Rescue protocols:
+""" + RESCUE_PROTOCOLS
